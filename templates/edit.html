@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Editar cadastro{% endblock %}
+{% block content %}
+<section class="form-section">
+  <h2>Editar cadastro</h2>
+  <form action="{{ url_for('update_person', person_id=person['id']) }}" method="post" class="card">
+    <label for="name">Nome</label>
+    <input type="text" id="name" name="name" value="{{ person['name'] }}" required />
+
+    <label for="area">Área / Coordenação</label>
+    <input type="text" id="area" name="area" value="{{ person['area'] }}" required />
+
+    <label for="database">Banco de Dados gerido</label>
+    <input type="text" id="database" name="database" value="{{ person['database'] }}" required />
+
+    <div class="actions-inline">
+      <a class="button secondary" href="{{ url_for('index') }}">Cancelar</a>
+      <button type="submit">Salvar alterações</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

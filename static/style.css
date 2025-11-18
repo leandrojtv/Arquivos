@@ -1,0 +1,151 @@
+:root {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --primary: #0b7fab;
+  --secondary: #e0f4fb;
+  --danger: #d9534f;
+  --light: #f9f9f9;
+  --border: #d5d5d5;
+}
+
+body {
+  margin: 0;
+  background-color: var(--light);
+  color: #333;
+}
+
+header {
+  background-color: var(--primary);
+  color: #fff;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+main {
+  padding: 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+h1,
+h2 {
+  margin-top: 0;
+}
+
+.card,
+form,
+table {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+input[type='text'] {
+  width: 100%;
+  padding: 0.65rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+button,
+.button {
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+
+button:hover,
+.button:hover {
+  opacity: 0.9;
+}
+
+.button.secondary {
+  background-color: #6c757d;
+}
+
+button.danger {
+  background-color: var(--danger);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  padding: 0;
+}
+
+table th,
+table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.actions form {
+  padding: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.actions-inline {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.messages {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+}
+
+.messages li {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.messages li.success {
+  background-color: #d1f7c4;
+  color: #205522;
+}
+
+.messages li.error {
+  background-color: #f9d4d4;
+  color: #6c1d1d;
+}
+
+@media (max-width: 640px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
