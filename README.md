@@ -39,7 +39,9 @@ A aplicação ficará disponível em `http://localhost:5000`.
 
 ## Funcionalidades
 
+- Landing page inicial com atalhos para as ações principais.
 - Listagem de cadastros existentes.
-- Criação de novos registros.
+- Criação de novos registros em uma tela dedicada.
+- Pesquisa por nome, área/coordenação ou banco de dados.
 - Edição e exclusão de registros.
 - Mensagens de feedback em todas as operações.

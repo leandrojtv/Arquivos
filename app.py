@@ -36,9 +36,20 @@ def query_db(query, params=()):
 
 
 @app.route("/")
-def index():
+def landing():
+    total = query_db("SELECT COUNT(*) as total FROM people")[0]["total"]
+    return render_template("landing.html", total=total)
+
+
+@app.route("/cadastros")
+def list_people():
     records = query_db("SELECT * FROM people ORDER BY id DESC")
-    return render_template("index.html", records=records)
+    return render_template("list.html", records=records)
+
+
+@app.route("/cadastro")
+def new_person_form():
+    return render_template("add.html")
 
 
 @app.route("/add", methods=["POST"])
@@ -49,14 +60,32 @@ def add_person():
 
     if not name or not area or not database:
         flash("Todos os campos são obrigatórios.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("new_person_form"))
 
     query_db(
         "INSERT INTO people (name, area, database) VALUES (?, ?, ?)",
         (name, area, database),
     )
     flash("Cadastro criado com sucesso!", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("list_people"))
+
+
+@app.route("/buscar")
+def search():
+    term = request.args.get("q", "").strip()
+    results = []
+    if term:
+        like_term = f"%{term}%"
+        results = query_db(
+            """
+            SELECT * FROM people
+            WHERE name LIKE ? OR area LIKE ? OR database LIKE ?
+            ORDER BY id DESC
+            """,
+            (like_term, like_term, like_term),
+        )
+
+    return render_template("search.html", query=term, results=results)
 
 
 @app.route("/edit/<int:person_id>")
@@ -64,7 +93,7 @@ def edit_person(person_id):
     result = query_db("SELECT * FROM people WHERE id = ?", (person_id,))
     if not result:
         flash("Registro não encontrado.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("list_people"))
     return render_template("edit.html", person=result[0])
 
 
@@ -83,14 +112,14 @@ def update_person(person_id):
         (name, area, database, person_id),
     )
     flash("Cadastro atualizado com sucesso!", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("list_people"))
 
 
 @app.route("/delete/<int:person_id>", methods=["POST"])
 def delete_person(person_id):
     query_db("DELETE FROM people WHERE id = ?", (person_id,))
     flash("Registro removido.", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("list_people"))
 
 
 init_db()
