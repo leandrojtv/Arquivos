@@ -1,6 +1,6 @@
 :root {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  --primary: #0b7fab;
+  --primary: #0d9ce0;
   --secondary: #e0f4fb;
   --danger: #d9534f;
   --light: #f9f9f9;
@@ -219,18 +219,30 @@ label {
 
 input[type='text'],
 input[type='email'],
-input[type='password'] {
+input[type='password'],
+select,
+textarea {
   width: 100%;
   padding: 0.75rem;
   margin-bottom: 1rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 1rem;
+  font-family: inherit;
+  background-color: #fff;
 }
 
 input[type='file'] {
   margin-bottom: 1rem;
   font-size: 1rem;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(13, 156, 224, 0.18);
 }
 
 button,
