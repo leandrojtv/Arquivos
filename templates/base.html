@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Cadastro de Pessoas{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <header>
+      <h1>Cadastro de Gestores de Banco de Dados</h1>
+      <nav>
+        {% if session.get('user') %}
+        <a href="{{ url_for('landing') }}">Início</a>
+        <a href="{{ url_for('new_person_form') }}">Cadastrar</a>
+        <a href="{{ url_for('list_people') }}">Listar</a>
+        <a href="{{ url_for('search') }}">Pesquisar</a>
+        <a href="{{ url_for('import_records') }}">Importar</a>
+        <a href="{{ url_for('logout') }}" class="pill">Sair ({{ session.get('user') }})</a>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="pill">Login</a>
+        {% endif %}
+      </nav>
+    </header>
+    <main>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>
