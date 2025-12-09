@@ -40,11 +40,28 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS people (
+        CREATE TABLE IF NOT EXISTS gestors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            area TEXT NOT NULL,
-            database TEXT NOT NULL
+            secretaria TEXT NOT NULL,
+            coordenacao TEXT NOT NULL,
+            email TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ambiente TEXT NOT NULL,
+            descricao TEXT NOT NULL,
+            gestor_id INTEGER NOT NULL,
+            substituto1_id INTEGER NOT NULL,
+            substituto2_id INTEGER NOT NULL,
+            FOREIGN KEY (gestor_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto2_id) REFERENCES gestors(id)
         )
         """
     )
@@ -101,7 +118,8 @@ def normalize_field(label: str) -> str:
 def bulk_insert(records):
     conn = sqlite3.connect(DB_PATH)
     conn.executemany(
-        "INSERT INTO people (name, area, database) VALUES (?, ?, ?)", records
+        "INSERT INTO gestors (name, secretaria, coordenacao, email) VALUES (?, ?, ?, ?)",
+        records,
     )
     conn.commit()
     conn.close()
@@ -124,11 +142,12 @@ def parse_csv(file_storage, delimiter):
     records = []
     for row in reader:
         normalized = {normalize_field(k): (v or "").strip() for k, v in row.items()}
-        base = normalized.get("basedados")
-        gestor = normalized.get("gestor")
-        area = normalized.get("area")
-        if base and gestor and area:
-            records.append((gestor, area, base))
+        name = normalized.get("gestor") or normalized.get("nome")
+        secretaria = normalized.get("secretaria")
+        coordenacao = normalized.get("coordenacao")
+        email = normalized.get("email")
+        if name and secretaria and coordenacao and email:
+            records.append((name, secretaria, coordenacao, email))
     return records
 
 
@@ -144,51 +163,269 @@ def parse_xlsx(file_storage):
     for data_row in rows[1:]:
         values = [str(cell).strip() if cell is not None else "" for cell in data_row]
         row_dict = {headers[i]: values[i] for i in range(min(len(headers), len(values)))}
-        base = row_dict.get("basedados")
-        gestor = row_dict.get("gestor")
-        area = row_dict.get("area")
-        if base and gestor and area:
-            records.append((gestor, area, base))
+        name = row_dict.get("gestor") or row_dict.get("nome")
+        secretaria = row_dict.get("secretaria")
+        coordenacao = row_dict.get("coordenacao")
+        email = row_dict.get("email")
+        if name and secretaria and coordenacao and email:
+            records.append((name, secretaria, coordenacao, email))
     return records
 
 
 @app.route("/")
 @login_required
 def landing():
-    total = query_db("SELECT COUNT(*) as total FROM people")[0]["total"]
-    return render_template("landing.html", total=total)
+    total_bases = query_db("SELECT COUNT(*) as total FROM bases")[0]["total"]
+    total_gestors = query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"]
+    return render_template("landing.html", total_bases=total_bases, total_gestors=total_gestors)
 
 
-@app.route("/cadastros")
+def get_gestors(term=None):
+    if term:
+        like_term = f"%{term}%"
+        return query_db(
+            """
+            SELECT * FROM gestors
+            WHERE name LIKE ? OR secretaria LIKE ? OR coordenacao LIKE ? OR email LIKE ?
+            ORDER BY name COLLATE NOCASE ASC
+            """,
+            (like_term, like_term, like_term, like_term),
+        )
+    return query_db("SELECT * FROM gestors ORDER BY name COLLATE NOCASE ASC")
+
+
+def parse_gestor_id(raw_value):
+    if not raw_value:
+        return None
+    candidate = raw_value.strip().split(" ", 1)[0]
+    try:
+        return int(candidate)
+    except ValueError:
+        return None
+
+
+@app.route("/gestores")
 @login_required
-def list_people():
-    records = query_db("SELECT * FROM people ORDER BY id DESC")
-    return render_template("list.html", records=records)
+def list_gestors():
+    search_term = request.args.get("q", "").strip()
+    gestors = get_gestors(search_term)
+    return render_template("gestors.html", gestors=gestors, query=search_term)
 
 
-@app.route("/cadastro")
+@app.route("/gestores/novo")
 @login_required
-def new_person_form():
-    return render_template("add.html")
+def new_gestor_form():
+    return render_template("gestor_form.html")
 
 
-@app.route("/add", methods=["POST"])
+@app.route("/gestores/criar", methods=["POST"])
 @login_required
-def add_person():
+def add_gestor():
     name = request.form.get("name", "").strip()
-    area = request.form.get("area", "").strip()
-    database = request.form.get("database", "").strip()
+    secretaria = request.form.get("secretaria", "").strip()
+    coordenacao = request.form.get("coordenacao", "").strip()
+    email = request.form.get("email", "").strip()
 
-    if not name or not area or not database:
-        flash("Todos os campos são obrigatórios.", "error")
-        return redirect(url_for("new_person_form"))
+    if not all([name, secretaria, coordenacao, email]):
+        flash("Preencha todos os campos do gestor.", "error")
+        return redirect(url_for("new_gestor_form"))
 
-    query_db(
-        "INSERT INTO people (name, area, database) VALUES (?, ?, ?)",
-        (name, area, database),
+    execute_db(
+        "INSERT INTO gestors (name, secretaria, coordenacao, email) VALUES (?, ?, ?, ?)",
+        (name, secretaria, coordenacao, email),
     )
-    flash("Cadastro criado com sucesso!", "success")
-    return redirect(url_for("list_people"))
+    flash("Gestor cadastrado com sucesso.", "success")
+    return redirect(url_for("list_gestors"))
+
+
+@app.route("/gestores/<int:gestor_id>/editar")
+@login_required
+def edit_gestor(gestor_id):
+    gestor = query_db("SELECT * FROM gestors WHERE id = ?", (gestor_id,))
+    if not gestor:
+        flash("Gestor não encontrado.", "error")
+        return redirect(url_for("list_gestors"))
+    return render_template("gestor_form.html", gestor=gestor[0])
+
+
+@app.route("/gestores/<int:gestor_id>/atualizar", methods=["POST"])
+@login_required
+def update_gestor(gestor_id):
+    name = request.form.get("name", "").strip()
+    secretaria = request.form.get("secretaria", "").strip()
+    coordenacao = request.form.get("coordenacao", "").strip()
+    email = request.form.get("email", "").strip()
+
+    if not all([name, secretaria, coordenacao, email]):
+        flash("Preencha todos os campos do gestor.", "error")
+        return redirect(url_for("edit_gestor", gestor_id=gestor_id))
+
+    execute_db(
+        "UPDATE gestors SET name = ?, secretaria = ?, coordenacao = ?, email = ? WHERE id = ?",
+        (name, secretaria, coordenacao, email, gestor_id),
+    )
+    flash("Gestor atualizado.", "success")
+    return redirect(url_for("list_gestors"))
+
+
+@app.route("/gestores/<int:gestor_id>/remover", methods=["POST"])
+@login_required
+def delete_gestor(gestor_id):
+    in_use = query_db(
+        "SELECT COUNT(*) as total FROM bases WHERE gestor_id = ? OR substituto1_id = ? OR substituto2_id = ?",
+        (gestor_id, gestor_id, gestor_id),
+    )[0]["total"]
+    if in_use:
+        flash("Não é possível remover: gestor vinculado a bases.", "error")
+        return redirect(url_for("list_gestors"))
+
+    execute_db("DELETE FROM gestors WHERE id = ?", (gestor_id,))
+    flash("Gestor removido.", "success")
+    return redirect(url_for("list_gestors"))
+
+
+def gestor_choices(term=None):
+    return [
+        {
+            "id": g["id"],
+            "label": f"{g['id']} - {g['name']} ({g['secretaria']} / {g['coordenacao']})",
+        }
+        for g in get_gestors(term)
+    ]
+
+
+def selected_labels_from_base(base_row, options):
+    label_map = {opt["id"]: opt["label"] for opt in options}
+    return {
+        "gestor": label_map.get(base_row["gestor_id"], ""),
+        "sub1": label_map.get(base_row["substituto1_id"], ""),
+        "sub2": label_map.get(base_row["substituto2_id"], ""),
+    }
+
+
+def ensure_gestor_exists(gestor_id, field_label):
+    if not gestor_id:
+        flash(f"Selecione um {field_label} válido a partir da lista.", "error")
+        return False
+    exists = query_db("SELECT id FROM gestors WHERE id = ?", (gestor_id,))
+    if not exists:
+        flash(f"{field_label} não encontrado.", "error")
+        return False
+    return True
+
+
+@app.route("/bases")
+@login_required
+def list_bases():
+    records = query_db(
+        """
+        SELECT b.*, g.name as gestor_name, gs1.name as sub1_name, gs2.name as sub2_name
+        FROM bases b
+        JOIN gestors g ON g.id = b.gestor_id
+        JOIN gestors gs1 ON gs1.id = b.substituto1_id
+        JOIN gestors gs2 ON gs2.id = b.substituto2_id
+        ORDER BY b.id DESC
+        """
+    )
+    return render_template("bases.html", bases=records)
+
+
+@app.route("/bases/nova")
+@login_required
+def new_base_form():
+    options = gestor_choices()
+    if len(options) < 3:
+        flash(
+            "Cadastre pelo menos três gestores para definir titular e substitutos.",
+            "error",
+        )
+        return redirect(url_for("new_gestor_form"))
+    return render_template("base_form.html", gestors=options, selected_labels=None)
+
+
+@app.route("/bases/criar", methods=["POST"])
+@login_required
+def add_base():
+    name = request.form.get("name", "").strip()
+    ambiente = request.form.get("ambiente", "").strip()
+    descricao = request.form.get("descricao", "").strip()
+    gestor_id = parse_gestor_id(request.form.get("gestor_id", ""))
+    sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
+    sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
+
+    if not all([name, ambiente, descricao]):
+        flash("Preencha todos os campos da base.", "error")
+        return redirect(url_for("new_base_form"))
+
+    if not (ensure_gestor_exists(gestor_id, "Gestor") and ensure_gestor_exists(sub1_id, "1º substituto") and ensure_gestor_exists(sub2_id, "2º substituto")):
+        return redirect(url_for("new_base_form"))
+
+    if len({gestor_id, sub1_id, sub2_id}) < 3:
+        flash("Gestor titular e substitutos precisam ser pessoas diferentes.", "error")
+        return redirect(url_for("new_base_form"))
+
+    execute_db(
+        """
+        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (name, ambiente, descricao, gestor_id, sub1_id, sub2_id),
+    )
+    flash("Base cadastrada com sucesso.", "success")
+    return redirect(url_for("list_bases"))
+
+
+@app.route("/bases/<int:base_id>/editar")
+@login_required
+def edit_base(base_id):
+    record = query_db("SELECT * FROM bases WHERE id = ?", (base_id,))
+    if not record:
+        flash("Base não encontrada.", "error")
+        return redirect(url_for("list_bases"))
+    options = gestor_choices()
+    labels = selected_labels_from_base(record[0], options)
+    return render_template("base_form.html", base=record[0], gestors=options, selected_labels=labels)
+
+
+@app.route("/bases/<int:base_id>/atualizar", methods=["POST"])
+@login_required
+def update_base(base_id):
+    name = request.form.get("name", "").strip()
+    ambiente = request.form.get("ambiente", "").strip()
+    descricao = request.form.get("descricao", "").strip()
+    gestor_id = parse_gestor_id(request.form.get("gestor_id", ""))
+    sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
+    sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
+
+    if not all([name, ambiente, descricao]):
+        flash("Preencha todos os campos da base.", "error")
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    if not (ensure_gestor_exists(gestor_id, "Gestor") and ensure_gestor_exists(sub1_id, "1º substituto") and ensure_gestor_exists(sub2_id, "2º substituto")):
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    if len({gestor_id, sub1_id, sub2_id}) < 3:
+        flash("Gestor titular e substitutos precisam ser pessoas diferentes.", "error")
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    execute_db(
+        """
+        UPDATE bases
+        SET name = ?, ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?
+        WHERE id = ?
+        """,
+        (name, ambiente, descricao, gestor_id, sub1_id, sub2_id, base_id),
+    )
+    flash("Base atualizada.", "success")
+    return redirect(url_for("list_bases"))
+
+
+@app.route("/bases/<int:base_id>/remover", methods=["POST"])
+@login_required
+def delete_base(base_id):
+    execute_db("DELETE FROM bases WHERE id = ?", (base_id,))
+    flash("Base removida.", "success")
+    return redirect(url_for("list_bases"))
 
 
 @app.route("/buscar")
@@ -200,51 +437,16 @@ def search():
         like_term = f"%{term}%"
         results = query_db(
             """
-            SELECT * FROM people
-            WHERE name LIKE ? OR area LIKE ? OR database LIKE ?
-            ORDER BY id DESC
+            SELECT b.*, g.name as gestor_name
+            FROM bases b
+            JOIN gestors g ON g.id = b.gestor_id
+            WHERE b.name LIKE ? OR b.descricao LIKE ? OR g.name LIKE ? OR b.ambiente LIKE ?
+            ORDER BY b.id DESC
             """,
-            (like_term, like_term, like_term),
+            (like_term, like_term, like_term, like_term),
         )
 
     return render_template("search.html", query=term, results=results)
-
-
-@app.route("/edit/<int:person_id>")
-@login_required
-def edit_person(person_id):
-    result = query_db("SELECT * FROM people WHERE id = ?", (person_id,))
-    if not result:
-        flash("Registro não encontrado.", "error")
-        return redirect(url_for("list_people"))
-    return render_template("edit.html", person=result[0])
-
-
-@app.route("/update/<int:person_id>", methods=["POST"])
-@login_required
-def update_person(person_id):
-    name = request.form.get("name", "").strip()
-    area = request.form.get("area", "").strip()
-    database = request.form.get("database", "").strip()
-
-    if not name or not area or not database:
-        flash("Todos os campos são obrigatórios.", "error")
-        return redirect(url_for("edit_person", person_id=person_id))
-
-    query_db(
-        "UPDATE people SET name = ?, area = ?, database = ? WHERE id = ?",
-        (name, area, database, person_id),
-    )
-    flash("Cadastro atualizado com sucesso!", "success")
-    return redirect(url_for("list_people"))
-
-
-@app.route("/delete/<int:person_id>", methods=["POST"])
-@login_required
-def delete_person(person_id):
-    query_db("DELETE FROM people WHERE id = ?", (person_id,))
-    flash("Registro removido.", "success")
-    return redirect(url_for("list_people"))
 
 
 @app.route("/importar", methods=["GET", "POST"])
@@ -280,7 +482,7 @@ def import_records():
 
     bulk_insert(records)
     flash(f"Importação concluída com {len(records)} registro(s).", "success")
-    return redirect(url_for("list_people"))
+    return redirect(url_for("list_gestors"))
 
 
 @app.route("/configuracoes")

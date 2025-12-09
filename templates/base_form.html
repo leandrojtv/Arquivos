@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar base' if base else 'Nova base' }}{% endblock %}
+{% block content %}
+<section class="card">
+  <header class="card-header">
+    <div>
+      <p class="eyebrow">Bases</p>
+      <h2>{{ 'Editar base' if base else 'Cadastrar base' }}</h2>
+      <p class="subtitle">Associe o gestor principal e dois substitutos previamente cadastrados.</p>
+    </div>
+    <a class="link" href="{{ url_for('list_bases') }}">Voltar para as bases</a>
+  </header>
+  <form method="post" action="{{ url_for('update_base', base_id=base['id']) if base else url_for('add_base') }}" class="stacked">
+    <label>Nome da base
+      <input type="text" name="name" value="{{ base['name'] if base else '' }}" required />
+    </label>
+    <label>Ambiente
+      <select name="ambiente" required>
+        {% set current = base['ambiente'] if base else '' %}
+        {% for option in ['Produção', 'Homologação', 'Desenvolvimento', 'DataLab'] %}
+          <option value="{{ option }}" {% if option == current %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Descrição
+      <textarea name="descricao" rows="3" required>{{ base['descricao'] if base else '' }}</textarea>
+    </label>
+    <div class="grid two">
+      <label>Gestor principal
+        <input type="text" name="gestor_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['gestor'] if selected_labels else '' }}" required />
+      </label>
+      <label>1º gestor substituto
+        <input type="text" name="substituto1_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['sub1'] if selected_labels else '' }}" required />
+      </label>
+      <label>2º gestor substituto
+        <input type="text" name="substituto2_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['sub2'] if selected_labels else '' }}" required />
+      </label>
+    </div>
+    <p class="helper">Use a busca da lista abaixo para localizar o gestor e selecione o item para preencher o campo.</p>
+    <datalist id="gestor-options">
+      {% for gestor in gestors %}
+        <option value="{{ gestor.id }} - {{ gestor.label }}">{{ gestor.label }}</option>
+      {% endfor %}
+    </datalist>
+    <div class="form-actions">
+      <a class="button ghost" href="{{ url_for('list_bases') }}">Cancelar</a>
+      <button type="submit" class="button">{{ 'Salvar alterações' if base else 'Cadastrar base' }}</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}Cadastro de Pessoas{% endblock %}</title>
+    <title>{% block title %}Gestão de Bases e Gestores{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body>
     <header class="site-header">
       <div class="header-main">
         <div>
-          <h1>Cadastro de Gestores de Banco de Dados</h1>
-          <p class="subtitle">Monitore bases, gestores e áreas com rapidez.</p>
+          <h1>Cadastro de Bases e Gestores</h1>
+          <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
         </div>
         {% if session.get('user') %}
         <div class="user-menu" tabindex="0">
@@ -30,10 +30,12 @@
       <nav class="main-nav">
         {% if session.get('user') %}
         <a href="{{ url_for('landing') }}">Início</a>
-        <a href="{{ url_for('new_person_form') }}">Cadastrar</a>
-        <a href="{{ url_for('list_people') }}">Listar</a>
+        <a href="{{ url_for('new_gestor_form') }}">Novo gestor</a>
+        <a href="{{ url_for('new_base_form') }}">Nova base</a>
+        <a href="{{ url_for('list_bases') }}">Bases</a>
+        <a href="{{ url_for('list_gestors') }}">Gestores</a>
         <a href="{{ url_for('search') }}">Pesquisar</a>
-        <a href="{{ url_for('import_records') }}">Importar</a>
+        <a href="{{ url_for('import_records') }}">Importar gestores</a>
         {% else %}
         <a href="{{ url_for('login') }}" class="pill">Login</a>
         {% endif %}

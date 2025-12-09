@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Gestores{% endblock %}
+{% block content %}
+<section class="card">
+  <header class="card-header">
+    <div>
+      <p class="eyebrow">Gestores</p>
+      <h2>Lista de gestores</h2>
+      <p class="subtitle">Pesquise pelo nome, secretaria, coordenação ou e-mail.</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="{{ url_for('new_gestor_form') }}">Adicionar gestor</a>
+    </div>
+  </header>
+  <form method="get" class="inline-form">
+    <input type="text" name="q" placeholder="Buscar gestores" value="{{ query }}" />
+    <button type="submit" class="button secondary">Buscar</button>
+  </form>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Secretaria</th>
+          <th>Coordenação</th>
+          <th>E-mail</th>
+          <th class="center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if gestors %}
+          {% for gestor in gestors %}
+          <tr>
+            <td>{{ gestor['name'] }}</td>
+            <td>{{ gestor['secretaria'] }}</td>
+            <td>{{ gestor['coordenacao'] }}</td>
+            <td>{{ gestor['email'] }}</td>
+            <td class="center actions">
+              <a class="link" href="{{ url_for('edit_gestor', gestor_id=gestor['id']) }}">Editar</a>
+              <form method="post" action="{{ url_for('delete_gestor', gestor_id=gestor['id']) }}" onsubmit="return confirm('Remover este gestor?');">
+                <button type="submit" class="link danger">Excluir</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="5" class="center">Nenhum gestor cadastrado.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

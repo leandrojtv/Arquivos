@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar gestor' if gestor else 'Novo gestor' }}{% endblock %}
+{% block content %}
+<section class="card">
+  <header class="card-header">
+    <div>
+      <p class="eyebrow">Gestores</p>
+      <h2>{{ 'Editar gestor' if gestor else 'Cadastrar gestor' }}</h2>
+      <p class="subtitle">Informe nome, secretaria, coordenação e e-mail do responsável.</p>
+    </div>
+    <a class="link" href="{{ url_for('list_gestors') }}">Voltar para a lista</a>
+  </header>
+  <form method="post" action="{{ url_for('update_gestor', gestor_id=gestor['id']) if gestor else url_for('add_gestor') }}" class="stacked">
+    <label>Nome
+      <input type="text" name="name" value="{{ gestor['name'] if gestor else '' }}" required />
+    </label>
+    <label>Secretaria
+      <input type="text" name="secretaria" value="{{ gestor['secretaria'] if gestor else '' }}" required />
+    </label>
+    <label>Coordenação
+      <input type="text" name="coordenacao" value="{{ gestor['coordenacao'] if gestor else '' }}" required />
+    </label>
+    <label>E-mail
+      <input type="email" name="email" value="{{ gestor['email'] if gestor else '' }}" required />
+    </label>
+    <div class="form-actions">
+      <a class="button ghost" href="{{ url_for('list_gestors') }}">Cancelar</a>
+      <button type="submit" class="button">{{ 'Atualizar' if gestor else 'Cadastrar' }}</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

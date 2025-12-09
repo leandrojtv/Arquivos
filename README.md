@@ -1,6 +1,6 @@
-# Sistema de cadastro de gestores
+# Sistema de cadastro de gestores e bases
 
-Aplicação web simples construída com Flask + SQLite para cadastro de pessoas, contendo nome, área/coordenação e banco de dados que gerem.
+Aplicação web simples construída com Flask + SQLite para registrar gestores (nome, secretaria, coordenação e e-mail) e cadastrar bases de dados com o gestor titular e dois substitutos.
 
 ## Pré-requisitos
 
@@ -48,12 +48,12 @@ A aplicação ficará disponível em `http://localhost:8000`.
 
 ## Funcionalidades
 
-- Landing page inicial com atalhos para as ações principais.
-- Listagem de cadastros existentes.
-- Criação de novos registros em uma tela dedicada.
-- Pesquisa por nome, área/coordenação ou banco de dados.
-- Edição e exclusão de registros.
-- Importação em massa via CSV ou XLSX com escolha de delimitador para CSV.
+- Landing page com atalho para cadastro de gestores e bases.
+- Cadastro e listagem de gestores (nome, secretaria, coordenação e e-mail).
+- Cadastro e listagem de bases (nome, ambiente, descrição) vinculando gestor titular, 1º e 2º substituto pesquisáveis.
+- Pesquisa de bases por nome, ambiente, descrição ou gestor.
+- Edição e exclusão tanto de gestores (quando não vinculados) quanto de bases.
+- Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
 - Mensagens de feedback em todas as operações.
 - Menu do usuário no topo para acessar **Configurações** e logout.
 - Página de gestão de usuários para criar, redefinir senha ou remover acessos (exceto o administrador padrão).
@@ -66,12 +66,13 @@ A aplicação ficará disponível em `http://localhost:8000`.
 4. Para alterar a senha de um usuário existente, informe a nova senha na linha correspondente e clique em **Atualizar**.
 5. Para remover um usuário, use **Remover** (o usuário padrão definido em `ADMIN_USERNAME` não pode ser excluído e você não pode remover o usuário atualmente logado).
 
-## Importar registros via arquivo
+## Importar gestores via arquivo
 
 1. Acesse o menu **Importar** na aplicação.
 2. Selecione um arquivo **CSV** ou **XLSX** contendo as colunas:
-   - `Base Dados`
-   - `Gestor`
-   - `Área`
+   - `Gestor` (ou `Nome`)
+   - `Secretaria`
+   - `Coordenação`
+   - `E-mail`
 3. Informe o delimitador ao usar CSV (padrão `;`). Para XLSX ele é ignorado.
-4. Envie o arquivo e, ao concluir, os registros são adicionados automaticamente à base de dados.
+4. Envie o arquivo e, ao concluir, os gestores são adicionados automaticamente à base de dados.

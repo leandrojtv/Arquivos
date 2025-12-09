@@ -6,7 +6,7 @@
     <div>
       <p class="eyebrow">Importação</p>
       <h2>Importar gestores via arquivo</h2>
-      <p class="subtitle">Envie um CSV ou XLSX com as colunas <strong>Base Dados</strong>, <strong>Gestor</strong> e <strong>Área</strong>.</p>
+      <p class="subtitle">Envie um CSV ou XLSX com as colunas <strong>Gestor</strong>, <strong>Secretaria</strong>, <strong>Coordenação</strong> e <strong>E-mail</strong>.</p>
     </div>
   </div>
   <form action="{{ url_for('import_records') }}" method="post" enctype="multipart/form-data">
@@ -22,7 +22,7 @@
 
     <div class="actions-inline">
       <button type="submit">Importar</button>
-      <a class="button ghost" href="{{ url_for('list_people') }}">Ver cadastros</a>
+      <a class="button ghost" href="{{ url_for('list_gestors') }}">Ver cadastros</a>
     </div>
   </form>
 </section>

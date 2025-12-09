@@ -5,15 +5,15 @@
   <div class="section-header">
     <div>
       <p class="eyebrow">Pesquisa</p>
-      <h2>Encontre um cadastro</h2>
-      <p class="subtitle">Busque por nome, área/coordenação ou banco de dados.</p>
+      <h2>Encontre uma base</h2>
+      <p class="subtitle">Busque pelo nome da base, ambiente, descrição ou gestor responsável.</p>
     </div>
-    <a class="link" href="{{ url_for('list_people') }}">Voltar para a lista</a>
+    <a class="link" href="{{ url_for('list_bases') }}">Voltar para as bases</a>
   </div>
   <form action="{{ url_for('search') }}" method="get" class="card search-card">
     <label for="q">Termo de pesquisa</label>
     <div class="search-row">
-      <input type="text" id="q" name="q" value="{{ query }}" placeholder="Ex.: Ana, Produção, Oracle" />
+      <input type="text" id="q" name="q" value="{{ query }}" placeholder="Ex.: Produção, DataLab, Maria" />
       <button type="submit">Pesquisar</button>
     </div>
   </form>
@@ -26,27 +26,27 @@
       <h2>{% if query %}Encontramos {{ results|length }} resultado(s){% else %}Nada para exibir ainda{% endif %}</h2>
       <p class="subtitle">{% if not query %}Digite um termo para iniciar a pesquisa.{% elif results|length == 0 %}Tente ajustar o termo para localizar cadastros correspondentes.{% else %}Filtre mais para refinar a busca.{% endif %}</p>
     </div>
-    <a class="link" href="{{ url_for('new_person_form') }}">Adicionar novo</a>
+    <a class="link" href="{{ url_for('new_base_form') }}">Adicionar base</a>
   </div>
   {% if results %}
     <table>
       <thead>
         <tr>
-          <th>Nome</th>
-          <th>Área / Coordenação</th>
-          <th>Banco de Dados</th>
+          <th>Base</th>
+          <th>Ambiente</th>
+          <th>Gestor</th>
           <th class="actions">Ações</th>
         </tr>
       </thead>
       <tbody>
-        {% for person in results %}
+        {% for base in results %}
           <tr>
-            <td>{{ person["name"] }}</td>
-            <td>{{ person["area"] }}</td>
-            <td>{{ person["database"] }}</td>
+            <td>{{ base["name"] }}</td>
+            <td>{{ base["ambiente"] }}</td>
+            <td>{{ base["gestor_name"] }}</td>
             <td class="actions">
-              <a class="button secondary" href="{{ url_for('edit_person', person_id=person['id']) }}">Editar</a>
-              <form action="{{ url_for('delete_person', person_id=person['id']) }}" method="post" onsubmit="return confirm('Deseja excluir este registro?');">
+              <a class="button secondary" href="{{ url_for('edit_base', base_id=base['id']) }}">Editar</a>
+              <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
                 <button type="submit" class="danger">Excluir</button>
               </form>
             </td>

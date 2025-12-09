@@ -4,18 +4,18 @@
 <section class="hero">
   <div>
     <p class="eyebrow">Bem-vindo</p>
-    <h2>Organize os cadastros de gestores de banco de dados com rapidez.</h2>
-    <p class="subtitle">Acesse opções dedicadas para registrar, listar e pesquisar informações.</p>
+    <h2>Organize gestores e bases de dados com clareza.</h2>
+    <p class="subtitle">Primeiro cadastre os gestores e depois vincule-os às bases com seus substitutos.</p>
     <div class="hero-actions">
-      <a class="button" href="{{ url_for('new_person_form') }}">Cadastrar novo</a>
-      <a class="button ghost" href="{{ url_for('list_people') }}">Ver lista</a>
-      <a class="button secondary" href="{{ url_for('search') }}">Pesquisar</a>
+      <a class="button" href="{{ url_for('new_gestor_form') }}">Cadastrar gestor</a>
+      <a class="button ghost" href="{{ url_for('new_base_form') }}">Cadastrar base</a>
+      <a class="button secondary" href="{{ url_for('search') }}">Pesquisar bases</a>
     </div>
   </div>
   <div class="hero-card">
-    <p class="stat-label">Cadastros totais</p>
-    <p class="stat-value">{{ total }}</p>
-    <p class="stat-helper">Use as ações acima para começar.</p>
+    <p class="stat-label">Resumo</p>
+    <p class="stat-value">{{ total_bases }} bases</p>
+    <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
   </div>
 </section>
 {% endblock %}
