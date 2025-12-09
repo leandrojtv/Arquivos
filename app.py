@@ -48,6 +48,23 @@ def init_db():
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO users (username, password)
+        VALUES (?, ?)
+        ON CONFLICT(username) DO UPDATE SET password=excluded.password
+        """,
+        (ADMIN_USERNAME, ADMIN_PASSWORD),
+    )
     conn.commit()
     conn.close()
 
@@ -60,6 +77,13 @@ def query_db(query, params=()):
     conn.commit()
     conn.close()
     return rows
+
+
+def execute_db(query, params=()):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(query, params)
+    conn.commit()
+    conn.close()
 
 
 def normalize_field(label: str) -> str:
@@ -259,6 +283,71 @@ def import_records():
     return redirect(url_for("list_people"))
 
 
+@app.route("/configuracoes")
+@login_required
+def settings():
+    users = query_db("SELECT id, username FROM users ORDER BY username ASC")
+    return render_template("settings.html", users=users)
+
+
+@app.route("/usuarios/criar", methods=["POST"])
+@login_required
+def create_user():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+
+    if not username or not password:
+        flash("Preencha usuário e senha para adicionar.", "error")
+        return redirect(url_for("settings"))
+
+    try:
+        execute_db(
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            (username, password),
+        )
+    except sqlite3.IntegrityError:
+        flash("Nome de usuário já existe.", "error")
+        return redirect(url_for("settings"))
+
+    flash("Usuário criado com sucesso.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/usuarios/<int:user_id>/resetar", methods=["POST"])
+@login_required
+def reset_user(user_id):
+    password = request.form.get("password", "")
+    if not password:
+        flash("Informe uma nova senha para continuar.", "error")
+        return redirect(url_for("settings"))
+
+    execute_db("UPDATE users SET password = ? WHERE id = ?", (password, user_id))
+    flash("Senha atualizada.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/usuarios/<int:user_id>/remover", methods=["POST"])
+@login_required
+def delete_user(user_id):
+    user = query_db("SELECT username FROM users WHERE id = ?", (user_id,))
+    if not user:
+        flash("Usuário não encontrado.", "error")
+        return redirect(url_for("settings"))
+
+    username = user[0]["username"]
+    if username == session.get("user"):
+        flash("Não é possível remover o usuário logado.", "error")
+        return redirect(url_for("settings"))
+
+    if username == ADMIN_USERNAME:
+        flash("O usuário administrador padrão não pode ser removido.", "error")
+        return redirect(url_for("settings"))
+
+    execute_db("DELETE FROM users WHERE id = ?", (user_id,))
+    flash("Usuário removido.", "success")
+    return redirect(url_for("settings"))
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user"):
@@ -268,7 +357,12 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        user = query_db(
+            "SELECT username FROM users WHERE username = ? AND password = ?",
+            (username, password),
+        )
+
+        if user:
             session["user"] = username
             next_page = request.args.get("next") or url_for("landing")
             flash("Login realizado com sucesso.", "success")

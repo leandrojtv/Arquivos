@@ -22,6 +22,7 @@ A aplicação ficará disponível em `http://localhost:8000`.
 - Usuário padrão: `admin`
 - Senha padrão: `admin`
 - Opcionalmente, defina credenciais via variáveis de ambiente `ADMIN_USERNAME` e `ADMIN_PASSWORD` antes de iniciar o servidor.
+- Após o login, o nome do usuário aparece no canto superior direito. Clique nele para abrir o menu com **Configurações** (gestão de usuários) e **Sair**.
 
 ## Executando com Docker
 
@@ -54,6 +55,16 @@ A aplicação ficará disponível em `http://localhost:8000`.
 - Edição e exclusão de registros.
 - Importação em massa via CSV ou XLSX com escolha de delimitador para CSV.
 - Mensagens de feedback em todas as operações.
+- Menu do usuário no topo para acessar **Configurações** e logout.
+- Página de gestão de usuários para criar, redefinir senha ou remover acessos (exceto o administrador padrão).
+
+## Gestão de usuários
+
+1. Faça login e clique no seu nome (canto superior direito) para abrir o menu do usuário.
+2. Selecione **Configurações** para abrir a tela de gestão.
+3. Para adicionar alguém, preencha o formulário "Novo usuário" e clique em **Adicionar**.
+4. Para alterar a senha de um usuário existente, informe a nova senha na linha correspondente e clique em **Atualizar**.
+5. Para remover um usuário, use **Remover** (o usuário padrão definido em `ADMIN_USERNAME` não pode ser excluído e você não pode remover o usuário atualmente logado).
 
 ## Importar registros via arquivo
 

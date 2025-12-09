@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Configurações{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Configurações</p>
+      <h2>Gestão de Usuários</h2>
+      <p class="muted">Cadastre novos acessos, redefina senhas e desative usuários que não devem mais utilizar o sistema.</p>
+    </div>
+  </div>
+
+  <div class="grid two-cols">
+    <div class="panel">
+      <h3>Novo usuário</h3>
+      <form action="{{ url_for('create_user') }}" method="post" class="stacked">
+        <label for="username">Usuário</label>
+        <input type="text" id="username" name="username" required />
+
+        <label for="password">Senha</label>
+        <input type="password" id="password" name="password" required />
+
+        <button type="submit">Adicionar</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h3>Usuários existentes</h3>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Usuário</th>
+              <th class="compact">Redefinir senha</th>
+              <th class="compact">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+            <tr>
+              <td>{{ user['username'] }}</td>
+              <td>
+                <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form">
+                  <input type="password" name="password" placeholder="Nova senha" required />
+                  <button type="submit" class="button secondary">Atualizar</button>
+                </form>
+              </td>
+              <td>
+                <div class="actions">
+                  <form action="{{ url_for('delete_user', user_id=user['id']) }}" method="post">
+                    <button type="submit" class="button ghost" onclick="return confirm('Remover este usuário?')">Remover</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3">Nenhum usuário cadastrado.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">O usuário administrador padrão não pode ser removido. Para utilizá-lo fora do padrão, ajuste as variáveis de ambiente <code>ADMIN_USERNAME</code> e <code>ADMIN_PASSWORD</code>.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

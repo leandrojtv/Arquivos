@@ -7,16 +7,33 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body>
-    <header>
-      <h1>Cadastro de Gestores de Banco de Dados</h1>
-      <nav>
+    <header class="site-header">
+      <div class="header-main">
+        <div>
+          <h1>Cadastro de Gestores de Banco de Dados</h1>
+          <p class="subtitle">Monitore bases, gestores e áreas com rapidez.</p>
+        </div>
+        {% if session.get('user') %}
+        <div class="user-menu" tabindex="0">
+          <div class="user-trigger">
+            <div class="avatar">{{ session.get('user')[0]|upper }}</div>
+            <span class="user-name">{{ session.get('user') }}</span>
+            <span class="chevron">▾</span>
+          </div>
+          <div class="user-dropdown">
+            <a href="{{ url_for('settings') }}">Configurações</a>
+            <a href="{{ url_for('logout') }}">Sair</a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      <nav class="main-nav">
         {% if session.get('user') %}
         <a href="{{ url_for('landing') }}">Início</a>
         <a href="{{ url_for('new_person_form') }}">Cadastrar</a>
         <a href="{{ url_for('list_people') }}">Listar</a>
         <a href="{{ url_for('search') }}">Pesquisar</a>
         <a href="{{ url_for('import_records') }}">Importar</a>
-        <a href="{{ url_for('logout') }}" class="pill">Sair ({{ session.get('user') }})</a>
         {% else %}
         <a href="{{ url_for('login') }}" class="pill">Login</a>
         {% endif %}
