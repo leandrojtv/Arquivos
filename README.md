@@ -1,6 +1,6 @@
 # Sistema de cadastro de gestores e bases
 
-Aplicação web simples construída com Flask + SQLite para registrar gestores (nome, secretaria, coordenação e e-mail) e cadastrar bases de dados com dois substitutos obrigatórios e um gestor titular opcional.
+Aplicação web simples construída com Flask + SQLite para registrar gestores (nome, secretaria, coordenação e e-mail) e cadastrar bases de dados com gestor titular obrigatório e até dois substitutos opcionais.
 
 ## Pré-requisitos
 
@@ -50,7 +50,7 @@ A aplicação ficará disponível em `http://localhost:8000`.
 
 - Landing page com atalho para cadastro de gestores e bases.
 - Cadastro e listagem de gestores (nome, secretaria, coordenação e e-mail).
-- Cadastro e listagem de bases (nome, ambiente, descrição) vinculando 1º e 2º substituto pesquisáveis e, se houver, gestor titular opcional.
+- Cadastro e listagem de bases (nome, ambiente, descrição) vinculando gestor titular obrigatório e até dois substitutos pesquisáveis e opcionais.
 - Pesquisa de bases por nome, ambiente, descrição ou gestor.
 - Edição e exclusão tanto de gestores (quando não vinculados) quanto de bases.
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.

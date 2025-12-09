@@ -57,8 +57,8 @@ def init_db():
             ambiente TEXT NOT NULL,
             descricao TEXT NOT NULL,
             gestor_id INTEGER NOT NULL,
-            substituto1_id INTEGER NOT NULL,
-            substituto2_id INTEGER NOT NULL,
+            substituto1_id INTEGER,
+            substituto2_id INTEGER,
             FOREIGN KEY (gestor_id) REFERENCES gestors(id),
             FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
             FOREIGN KEY (substituto2_id) REFERENCES gestors(id)
@@ -82,6 +82,49 @@ def init_db():
         """,
         (ADMIN_USERNAME, ADMIN_PASSWORD),
     )
+    conn.commit()
+    conn.close()
+    migrate_bases_nullable()
+
+
+def migrate_bases_nullable():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    if not columns:
+        conn.close()
+        return
+
+    notnull_map = {col[1]: bool(col[3]) for col in columns}
+    needs_migration = notnull_map.get("substituto1_id") or notnull_map.get("substituto2_id")
+
+    if not needs_migration:
+        conn.close()
+        return
+
+    conn.execute("ALTER TABLE bases RENAME TO bases_old")
+    conn.execute(
+        """
+        CREATE TABLE bases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ambiente TEXT NOT NULL,
+            descricao TEXT NOT NULL,
+            gestor_id INTEGER NOT NULL,
+            substituto1_id INTEGER,
+            substituto2_id INTEGER,
+            FOREIGN KEY (gestor_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto2_id) REFERENCES gestors(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO bases (id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
+        SELECT id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id FROM bases_old
+        """
+    )
+    conn.execute("DROP TABLE bases_old")
     conn.commit()
     conn.close()
 
@@ -322,8 +365,8 @@ def list_bases():
         SELECT b.*, g.name as gestor_name, gs1.name as sub1_name, gs2.name as sub2_name
         FROM bases b
         LEFT JOIN gestors g ON g.id = b.gestor_id
-        JOIN gestors gs1 ON gs1.id = b.substituto1_id
-        JOIN gestors gs2 ON gs2.id = b.substituto2_id
+        LEFT JOIN gestors gs1 ON gs1.id = b.substituto1_id
+        LEFT JOIN gestors gs2 ON gs2.id = b.substituto2_id
         ORDER BY b.id DESC
         """
     )
@@ -334,8 +377,8 @@ def list_bases():
 @login_required
 def new_base_form():
     options = gestor_choices()
-    if len(options) < 2:
-        flash("Cadastre pelo menos dois gestores para definir substitutos.", "error")
+    if not options:
+        flash("Cadastre pelo menos um gestor antes de criar bases.", "error")
         return redirect(url_for("new_gestor_form"))
     return render_template("base_form.html", gestors=options, selected_labels=None)
 
@@ -354,17 +397,15 @@ def add_base():
         flash("Preencha todos os campos da base.", "error")
         return redirect(url_for("new_base_form"))
 
-    if not (
-        (not gestor_id or ensure_gestor_exists(gestor_id, "Gestor"))
-        and ensure_gestor_exists(sub1_id, "1º substituto")
-        and ensure_gestor_exists(sub2_id, "2º substituto")
-    ):
+    if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
         return redirect(url_for("new_base_form"))
 
-    unique_ids = {sub1_id, sub2_id}
-    if gestor_id:
-        unique_ids.add(gestor_id)
-    if len(unique_ids) < 2 or sub1_id == sub2_id:
+    if sub1_id and not ensure_gestor_exists(sub1_id, "1º substituto"):
+        return redirect(url_for("new_base_form"))
+    if sub2_id and not ensure_gestor_exists(sub2_id, "2º substituto"):
+        return redirect(url_for("new_base_form"))
+
+    if sub1_id and sub2_id and sub1_id == sub2_id:
         flash("Substitutos precisam ser pessoas diferentes.", "error")
         return redirect(url_for("new_base_form"))
     if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
@@ -408,17 +449,15 @@ def update_base(base_id):
         flash("Preencha todos os campos da base.", "error")
         return redirect(url_for("edit_base", base_id=base_id))
 
-    if not (
-        (not gestor_id or ensure_gestor_exists(gestor_id, "Gestor"))
-        and ensure_gestor_exists(sub1_id, "1º substituto")
-        and ensure_gestor_exists(sub2_id, "2º substituto")
-    ):
+    if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
         return redirect(url_for("edit_base", base_id=base_id))
 
-    unique_ids = {sub1_id, sub2_id}
-    if gestor_id:
-        unique_ids.add(gestor_id)
-    if len(unique_ids) < 2 or sub1_id == sub2_id:
+    if sub1_id and not ensure_gestor_exists(sub1_id, "1º substituto"):
+        return redirect(url_for("edit_base", base_id=base_id))
+    if sub2_id and not ensure_gestor_exists(sub2_id, "2º substituto"):
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    if sub1_id and sub2_id and sub1_id == sub2_id:
         flash("Substitutos precisam ser pessoas diferentes.", "error")
         return redirect(url_for("edit_base", base_id=base_id))
     if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
