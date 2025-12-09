@@ -30,17 +30,35 @@
       <nav class="main-nav">
         {% if session.get('user') %}
         <a href="{{ url_for('landing') }}">Início</a>
-        <a href="{{ url_for('new_gestor_form') }}">Novo gestor</a>
-        <a href="{{ url_for('new_base_form') }}">Nova base</a>
         <a href="{{ url_for('list_bases') }}">Bases</a>
         <a href="{{ url_for('list_gestors') }}">Gestores</a>
         <a href="{{ url_for('search') }}">Pesquisar</a>
         <a href="{{ url_for('import_records') }}">Importar gestores</a>
+        <button type="button" class="button ghost pill open-modal" data-target="novo-modal">Novo</button>
         {% else %}
         <a href="{{ url_for('login') }}" class="pill">Login</a>
         {% endif %}
       </nav>
     </header>
+    {% if session.get('user') %}
+    <div class="modal-overlay" id="novo-modal" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="novo-title">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow">Novo</p>
+            <h3 id="novo-title">O que deseja cadastrar?</h3>
+            <p class="subtitle">Escolha se quer criar um gestor ou uma base.</p>
+          </div>
+          <button type="button" class="icon-button close-modal" data-target="novo-modal" aria-label="Fechar">✕</button>
+        </header>
+        <div class="modal-actions">
+          <a class="button" href="{{ url_for('new_gestor_form') }}">Novo gestor</a>
+          <a class="button secondary" href="{{ url_for('new_base_form') }}">Nova base</a>
+        </div>
+        <button type="button" class="button ghost full close-modal" data-target="novo-modal">Cancelar</button>
+      </div>
+    </div>
+    {% endif %}
     <main>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -53,5 +71,39 @@
       {% endwith %}
       {% block content %}{% endblock %}
     </main>
+    {% if session.get('user') %}
+    <script>
+      const toggleModal = (targetId, open) => {
+        const el = document.getElementById(targetId);
+        if (!el) return;
+        if (open) {
+          el.classList.add('open');
+          el.setAttribute('aria-hidden', 'false');
+        } else {
+          el.classList.remove('open');
+          el.setAttribute('aria-hidden', 'true');
+        }
+      };
+      document.addEventListener('click', (event) => {
+        const openTrigger = event.target.closest('.open-modal');
+        if (openTrigger) {
+          toggleModal(openTrigger.dataset.target, true);
+        }
+        const closeTrigger = event.target.closest('.close-modal');
+        if (closeTrigger) {
+          toggleModal(closeTrigger.dataset.target, false);
+        }
+        const overlay = event.target.classList.contains('modal-overlay') ? event.target : null;
+        if (overlay) {
+          toggleModal(overlay.id, false);
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          document.querySelectorAll('.modal-overlay.open').forEach((el) => toggleModal(el.id, false));
+        }
+      });
+    </script>
+    {% endif %}
   </body>
 </html>

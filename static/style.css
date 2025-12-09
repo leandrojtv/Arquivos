@@ -181,7 +181,9 @@ label {
   margin-bottom: 0.35rem;
 }
 
-input[type='text'] {
+input[type='text'],
+input[type='email'],
+input[type='password'] {
   width: 100%;
   padding: 0.75rem;
   margin-bottom: 1rem;
@@ -313,6 +315,63 @@ table td.compact {
 .messages li.error {
   background-color: #f9d4d4;
   color: #6c1d1d;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+  z-index: 20;
+  padding: 1rem;
+}
+
+.modal-overlay.open {
+  display: flex;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12);
+  padding: 1.25rem 1.5rem 1.75rem;
+  width: min(520px, 100%);
+  border: 1px solid #edf0f3;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.icon-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: #1f2933;
+  box-shadow: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.button.full {
+  width: 100%;
+  justify-content: center;
 }
 
 .section-header {

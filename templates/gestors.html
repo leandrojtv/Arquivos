@@ -8,9 +8,6 @@
       <h2>Lista de gestores</h2>
       <p class="subtitle">Pesquise pelo nome, secretaria, coordenação ou e-mail.</p>
     </div>
-    <div class="actions">
-      <a class="button" href="{{ url_for('new_gestor_form') }}">Adicionar gestor</a>
-    </div>
   </header>
   <form method="get" class="inline-form">
     <input type="text" name="q" placeholder="Buscar gestores" value="{{ query }}" />

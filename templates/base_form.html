@@ -6,7 +6,7 @@
     <div>
       <p class="eyebrow">Bases</p>
       <h2>{{ 'Editar base' if base else 'Cadastrar base' }}</h2>
-      <p class="subtitle">Associe o gestor principal e dois substitutos previamente cadastrados.</p>
+      <p class="subtitle">Informe os substitutos e, se desejar, associe um gestor titular previamente cadastrado.</p>
     </div>
     <a class="link" href="{{ url_for('list_bases') }}">Voltar para as bases</a>
   </header>
@@ -26,8 +26,8 @@
       <textarea name="descricao" rows="3" required>{{ base['descricao'] if base else '' }}</textarea>
     </label>
     <div class="grid two">
-      <label>Gestor principal
-        <input type="text" name="gestor_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['gestor'] if selected_labels else '' }}" required />
+      <label>Gestor principal (opcional)
+        <input type="text" name="gestor_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['gestor'] if selected_labels else '' }}" />
       </label>
       <label>1º gestor substituto
         <input type="text" name="substituto1_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['sub1'] if selected_labels else '' }}" required />
@@ -36,7 +36,7 @@
         <input type="text" name="substituto2_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['sub2'] if selected_labels else '' }}" required />
       </label>
     </div>
-    <p class="helper">Use a busca da lista abaixo para localizar o gestor e selecione o item para preencher o campo.</p>
+    <p class="helper">Use a busca da lista abaixo para localizar os gestores; o titular é opcional, mas os substitutos precisam ser diferentes.</p>
     <datalist id="gestor-options">
       {% for gestor in gestors %}
         <option value="{{ gestor.id }} - {{ gestor.label }}">{{ gestor.label }}</option>

@@ -321,7 +321,7 @@ def list_bases():
         """
         SELECT b.*, g.name as gestor_name, gs1.name as sub1_name, gs2.name as sub2_name
         FROM bases b
-        JOIN gestors g ON g.id = b.gestor_id
+        LEFT JOIN gestors g ON g.id = b.gestor_id
         JOIN gestors gs1 ON gs1.id = b.substituto1_id
         JOIN gestors gs2 ON gs2.id = b.substituto2_id
         ORDER BY b.id DESC
@@ -334,11 +334,8 @@ def list_bases():
 @login_required
 def new_base_form():
     options = gestor_choices()
-    if len(options) < 3:
-        flash(
-            "Cadastre pelo menos três gestores para definir titular e substitutos.",
-            "error",
-        )
+    if len(options) < 2:
+        flash("Cadastre pelo menos dois gestores para definir substitutos.", "error")
         return redirect(url_for("new_gestor_form"))
     return render_template("base_form.html", gestors=options, selected_labels=None)
 
@@ -357,11 +354,21 @@ def add_base():
         flash("Preencha todos os campos da base.", "error")
         return redirect(url_for("new_base_form"))
 
-    if not (ensure_gestor_exists(gestor_id, "Gestor") and ensure_gestor_exists(sub1_id, "1º substituto") and ensure_gestor_exists(sub2_id, "2º substituto")):
+    if not (
+        (not gestor_id or ensure_gestor_exists(gestor_id, "Gestor"))
+        and ensure_gestor_exists(sub1_id, "1º substituto")
+        and ensure_gestor_exists(sub2_id, "2º substituto")
+    ):
         return redirect(url_for("new_base_form"))
 
-    if len({gestor_id, sub1_id, sub2_id}) < 3:
-        flash("Gestor titular e substitutos precisam ser pessoas diferentes.", "error")
+    unique_ids = {sub1_id, sub2_id}
+    if gestor_id:
+        unique_ids.add(gestor_id)
+    if len(unique_ids) < 2 or sub1_id == sub2_id:
+        flash("Substitutos precisam ser pessoas diferentes.", "error")
+        return redirect(url_for("new_base_form"))
+    if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+        flash("Gestor titular não pode repetir um substituto.", "error")
         return redirect(url_for("new_base_form"))
 
     execute_db(
@@ -401,11 +408,21 @@ def update_base(base_id):
         flash("Preencha todos os campos da base.", "error")
         return redirect(url_for("edit_base", base_id=base_id))
 
-    if not (ensure_gestor_exists(gestor_id, "Gestor") and ensure_gestor_exists(sub1_id, "1º substituto") and ensure_gestor_exists(sub2_id, "2º substituto")):
+    if not (
+        (not gestor_id or ensure_gestor_exists(gestor_id, "Gestor"))
+        and ensure_gestor_exists(sub1_id, "1º substituto")
+        and ensure_gestor_exists(sub2_id, "2º substituto")
+    ):
         return redirect(url_for("edit_base", base_id=base_id))
 
-    if len({gestor_id, sub1_id, sub2_id}) < 3:
-        flash("Gestor titular e substitutos precisam ser pessoas diferentes.", "error")
+    unique_ids = {sub1_id, sub2_id}
+    if gestor_id:
+        unique_ids.add(gestor_id)
+    if len(unique_ids) < 2 or sub1_id == sub2_id:
+        flash("Substitutos precisam ser pessoas diferentes.", "error")
+        return redirect(url_for("edit_base", base_id=base_id))
+    if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+        flash("Gestor titular não pode repetir um substituto.", "error")
         return redirect(url_for("edit_base", base_id=base_id))
 
     execute_db(
@@ -439,7 +456,7 @@ def search():
             """
             SELECT b.*, g.name as gestor_name
             FROM bases b
-            JOIN gestors g ON g.id = b.gestor_id
+            LEFT JOIN gestors g ON g.id = b.gestor_id
             WHERE b.name LIKE ? OR b.descricao LIKE ? OR g.name LIKE ? OR b.ambiente LIKE ?
             ORDER BY b.id DESC
             """,
