@@ -35,12 +35,16 @@
       </div>
       <nav class="main-nav" id="main-menu">
         {% if session.get('user') %}
-        <a href="{{ url_for('landing') }}">Início</a>
-        <a href="{{ url_for('list_bases') }}">Bases</a>
-        <a href="{{ url_for('list_gestors') }}">Gestores</a>
-        <a href="{{ url_for('search') }}">Pesquisar</a>
-        <a href="{{ url_for('import_records') }}">Importar gestores</a>
-        <button type="button" class="button ghost pill open-modal" data-target="novo-modal"><span class="icon">✚</span><span>Novo</span></button>
+        <button type="button" class="button nav-button primary open-modal nav-new" data-target="novo-modal">
+          <span class="icon">✚</span><span>Novo</span>
+        </button>
+        <div class="nav-links">
+          <a class="button nav-button ghost" href="{{ url_for('landing') }}"><span class="icon">🏠</span><span>Início</span></a>
+          <a class="button nav-button ghost" href="{{ url_for('list_bases') }}"><span class="icon">🗂️</span><span>Bases</span></a>
+          <a class="button nav-button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">👥</span><span>Gestores</span></a>
+          <a class="button nav-button ghost" href="{{ url_for('search') }}"><span class="icon">🔎</span><span>Pesquisar</span></a>
+          <a class="button nav-button ghost" href="{{ url_for('import_records') }}"><span class="icon">⬆️</span><span>Importar</span></a>
+        </div>
         {% else %}
         <a href="{{ url_for('login') }}" class="pill">Login</a>
         {% endif %}
