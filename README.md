@@ -46,4 +46,15 @@ A aplicação ficará disponível em `http://localhost:8000`.
 - Criação de novos registros em uma tela dedicada.
 - Pesquisa por nome, área/coordenação ou banco de dados.
 - Edição e exclusão de registros.
+- Importação em massa via CSV ou XLSX com escolha de delimitador para CSV.
 - Mensagens de feedback em todas as operações.
+
+## Importar registros via arquivo
+
+1. Acesse o menu **Importar** na aplicação.
+2. Selecione um arquivo **CSV** ou **XLSX** contendo as colunas:
+   - `Base Dados`
+   - `Gestor`
+   - `Área`
+3. Informe o delimitador ao usar CSV (padrão `;`). Para XLSX ele é ignorado.
+4. Envie o arquivo e, ao concluir, os registros são adicionados automaticamente à base de dados.

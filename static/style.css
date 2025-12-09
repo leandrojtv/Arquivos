@@ -87,6 +87,11 @@ input[type='text'] {
   font-size: 1rem;
 }
 
+input[type='file'] {
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+
 button,
 .button {
   padding: 0.75rem 1.35rem;
@@ -271,6 +276,11 @@ table td {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.form-helper {
+  color: #52606d;
+  margin: -0.35rem 0 0.75rem 0;
 }
 
 .search-card {

@@ -1,7 +1,12 @@
+import csv
 import os
 import sqlite3
+import unicodedata
+from io import BytesIO, StringIO
 from pathlib import Path
+
 from flask import Flask, render_template, request, redirect, url_for, flash
+from openpyxl import load_workbook
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -44,6 +49,61 @@ def query_db(query, params=()):
     conn.commit()
     conn.close()
     return rows
+
+
+def normalize_field(label: str) -> str:
+    cleaned = (
+        unicodedata.normalize("NFKD", label)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+        .replace(" ", "")
+        .replace("_", "")
+    )
+    return cleaned
+
+
+def bulk_insert(records):
+    conn = sqlite3.connect(DB_PATH)
+    conn.executemany(
+        "INSERT INTO people (name, area, database) VALUES (?, ?, ?)", records
+    )
+    conn.commit()
+    conn.close()
+
+
+def parse_csv(file_storage, delimiter):
+    content = file_storage.stream.read().decode("utf-8-sig")
+    reader = csv.DictReader(StringIO(content), delimiter=delimiter)
+    records = []
+    for row in reader:
+        normalized = {normalize_field(k): (v or "").strip() for k, v in row.items()}
+        base = normalized.get("basedados")
+        gestor = normalized.get("gestor")
+        area = normalized.get("area")
+        if base and gestor and area:
+            records.append((gestor, area, base))
+    return records
+
+
+def parse_xlsx(file_storage):
+    file_bytes = BytesIO(file_storage.read())
+    workbook = load_workbook(filename=file_bytes, data_only=True)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return []
+    headers = [normalize_field(str(h)) for h in rows[0] if h is not None]
+    records = []
+    for data_row in rows[1:]:
+        values = [str(cell).strip() if cell is not None else "" for cell in data_row]
+        row_dict = {headers[i]: values[i] for i in range(min(len(headers), len(values)))}
+        base = row_dict.get("basedados")
+        gestor = row_dict.get("gestor")
+        area = row_dict.get("area")
+        if base and gestor and area:
+            records.append((gestor, area, base))
+    return records
 
 
 @app.route("/")
@@ -130,6 +190,41 @@ def update_person(person_id):
 def delete_person(person_id):
     query_db("DELETE FROM people WHERE id = ?", (person_id,))
     flash("Registro removido.", "success")
+    return redirect(url_for("list_people"))
+
+
+@app.route("/importar", methods=["GET", "POST"])
+def import_records():
+    if request.method == "GET":
+        return render_template("import.html")
+
+    upload = request.files.get("file")
+    delimiter = request.form.get("delimiter", ";").strip() or ";"
+
+    if not upload or not upload.filename:
+        flash("Selecione um arquivo CSV ou XLSX para importar.", "error")
+        return redirect(url_for("import_records"))
+
+    ext = upload.filename.rsplit(".", 1)[-1].lower()
+
+    try:
+        if ext == "csv":
+            records = parse_csv(upload, delimiter)
+        elif ext in {"xlsx", "xls"}:
+            records = parse_xlsx(upload)
+        else:
+            flash("Formato não suportado. Envie um CSV ou XLSX.", "error")
+            return redirect(url_for("import_records"))
+    except Exception:
+        flash("Não foi possível ler o arquivo enviado. Verifique o formato e tente novamente.", "error")
+        return redirect(url_for("import_records"))
+
+    if not records:
+        flash("Nenhum registro válido encontrado. Confira as colunas e se há dados preenchidos.", "error")
+        return redirect(url_for("import_records"))
+
+    bulk_insert(records)
+    flash(f"Importação concluída com {len(records)} registro(s).", "success")
     return redirect(url_for("list_people"))
 
 
