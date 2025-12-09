@@ -9,6 +9,12 @@
   <body>
     <header class="site-header">
       <div class="header-main">
+        {% if session.get('user') %}
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">
+          <span class="icon">☰</span>
+          <span>Menu</span>
+        </button>
+        {% endif %}
         <div>
           <h1>Cadastro de Bases e Gestores</h1>
           <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
@@ -27,11 +33,6 @@
         </div>
         {% endif %}
       </div>
-      <div class="nav-actions">
-        {% if session.get('user') %}
-        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">☰ Menu</button>
-        {% endif %}
-      </div>
       <nav class="main-nav" id="main-menu">
         {% if session.get('user') %}
         <a href="{{ url_for('landing') }}">Início</a>
@@ -39,7 +40,7 @@
         <a href="{{ url_for('list_gestors') }}">Gestores</a>
         <a href="{{ url_for('search') }}">Pesquisar</a>
         <a href="{{ url_for('import_records') }}">Importar gestores</a>
-        <button type="button" class="button ghost pill open-modal" data-target="novo-modal"><span class="plus">+</span> Novo</button>
+        <button type="button" class="button ghost pill open-modal" data-target="novo-modal"><span class="icon">✚</span><span>Novo</span></button>
         {% else %}
         <a href="{{ url_for('login') }}" class="pill">Login</a>
         {% endif %}
@@ -54,13 +55,13 @@
             <h3 id="novo-title">O que deseja cadastrar?</h3>
             <p class="subtitle">Escolha se quer criar um gestor ou uma base.</p>
           </div>
-          <button type="button" class="icon-button close-modal" data-target="novo-modal" aria-label="Fechar">✕</button>
+          <button type="button" class="icon-button close-modal" data-target="novo-modal" aria-label="Fechar"><span class="icon">✕</span></button>
         </header>
         <div class="modal-actions">
-          <a class="button" href="{{ url_for('new_gestor_form') }}">Novo gestor</a>
-          <a class="button secondary" href="{{ url_for('new_base_form') }}">Nova base</a>
+          <a class="button" href="{{ url_for('new_gestor_form') }}"><span class="icon">👤</span><span>Novo gestor</span></a>
+          <a class="button secondary" href="{{ url_for('new_base_form') }}"><span class="icon">🗂️</span><span>Nova base</span></a>
         </div>
-        <button type="button" class="button ghost full close-modal" data-target="novo-modal">Cancelar</button>
+        <button type="button" class="button ghost full close-modal" data-target="novo-modal"><span class="icon">↩</span><span>Cancelar</span></button>
       </div>
     </div>
     {% endif %}

@@ -9,8 +9,8 @@
       <p class="subtitle">Confira e gerencie os registros já cadastrados.</p>
     </div>
     <div class="section-actions">
-      <a class="button" href="{{ url_for('new_person_form') }}">Novo cadastro</a>
-      <a class="button secondary" href="{{ url_for('search') }}">Pesquisar</a>
+      <a class="button" href="{{ url_for('new_person_form') }}"><span class="icon">➕</span><span>Novo cadastro</span></a>
+      <a class="button secondary" href="{{ url_for('search') }}"><span class="icon">🔍</span><span>Pesquisar</span></a>
     </div>
   </div>
   {% if records %}
@@ -30,9 +30,9 @@
             <td>{{ person["area"] }}</td>
             <td>{{ person["database"] }}</td>
             <td class="actions">
-              <a class="button secondary" href="{{ url_for('edit_person', person_id=person['id']) }}">Editar</a>
+              <a class="button secondary compact" href="{{ url_for('edit_person', person_id=person['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
               <form action="{{ url_for('delete_person', person_id=person['id']) }}" method="post" onsubmit="return confirm('Deseja excluir este registro?');">
-                <button type="submit" class="danger">Excluir</button>
+                <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
               </form>
             </td>
           </tr>

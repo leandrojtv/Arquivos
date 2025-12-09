@@ -33,9 +33,9 @@
               <td>{{ base['sub1_name'] or '—' }}</td>
               <td>{{ base['sub2_name'] or '—' }}</td>
               <td class="center actions">
-                <a class="link" href="{{ url_for('edit_base', base_id=base['id']) }}">Editar</a>
+                <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
                 <form method="post" action="{{ url_for('delete_base', base_id=base['id']) }}" onsubmit="return confirm('Remover esta base?');">
-                  <button type="submit" class="link danger">Excluir</button>
+                  <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
                 </form>
               </td>
             </tr>

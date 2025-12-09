@@ -14,7 +14,10 @@
     <label for="q">Termo de pesquisa</label>
     <div class="search-row">
       <input type="text" id="q" name="q" value="{{ query }}" placeholder="Ex.: Produção, DataLab, Maria" />
-      <button type="submit">Pesquisar</button>
+      <button type="submit" class="button secondary">
+        <span class="icon">🔍</span>
+        <span>Pesquisar</span>
+      </button>
     </div>
   </form>
 </section>
@@ -45,9 +48,9 @@
             <td>{{ base["ambiente"] }}</td>
             <td>{{ base["gestor_name"] }}</td>
             <td class="actions">
-              <a class="button secondary" href="{{ url_for('edit_base', base_id=base['id']) }}">Editar</a>
+              <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
               <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
-                <button type="submit" class="danger">Excluir</button>
+                <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
               </form>
             </td>
           </tr>

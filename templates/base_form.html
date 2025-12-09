@@ -43,8 +43,8 @@
       {% endfor %}
     </datalist>
     <div class="form-actions">
-      <a class="button ghost" href="{{ url_for('list_bases') }}">Cancelar</a>
-      <button type="submit" class="button">{{ 'Salvar alterações' if base else 'Cadastrar base' }}</button>
+      <a class="button ghost" href="{{ url_for('list_bases') }}"><span class="icon">↩</span><span>Cancelar</span></a>
+      <button type="submit" class="button"><span class="icon">💾</span><span>{{ 'Salvar alterações' if base else 'Cadastrar base' }}</span></button>
     </div>
   </form>
 </section>

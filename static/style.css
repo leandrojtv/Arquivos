@@ -28,9 +28,9 @@ body {
 }
 
 .header-main {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
 }
 
@@ -44,6 +44,7 @@ body {
   opacity: 0.9;
   font-size: 0.95rem;
 }
+
 
 .main-nav {
   display: none;
@@ -63,23 +64,10 @@ body {
 }
 
 .menu-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  padding: 0.4rem 0.85rem;
-  cursor: pointer;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-.menu-toggle:hover,
-.menu-toggle:focus {
-  background: rgba(255, 255, 255, 0.26);
-  outline: none;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
 .main-nav a {
@@ -102,10 +90,11 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
-.plus {
-  margin-right: 0.45rem;
-  font-weight: 800;
-  font-size: 1.1rem;
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
 }
 
 .user-menu {
@@ -247,24 +236,28 @@ textarea:focus {
 
 button,
 .button {
-  padding: 0.75rem 1.35rem;
-  border: none;
-  border-radius: 10px;
-  background-color: var(--primary);
+  padding: 0.75rem 1.25rem;
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary), #0a7db0);
   color: #fff;
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   text-align: center;
   transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.2s ease;
+  box-shadow: 0 10px 25px rgba(11, 127, 171, 0.2);
 }
 
 button:hover,
 .button:hover {
-  opacity: 0.92;
+  opacity: 0.95;
   transform: translateY(-1px);
-  box-shadow: 0 10px 25px rgba(11, 127, 171, 0.25);
+  box-shadow: 0 12px 28px rgba(10, 125, 176, 0.3);
 }
 
 .inline-form {
@@ -286,19 +279,30 @@ button:hover,
   margin-bottom: 1rem;
 }
 
+
 .button.secondary {
-  background-color: #6c757d;
+  background: linear-gradient(135deg, #5e6d78, #4c5861);
+  border-color: #5e6d78;
 }
 
 .button.ghost {
-  background-color: transparent;
+  background-color: rgba(255, 255, 255, 0.12);
   color: var(--primary);
-  border: 1px solid var(--primary);
+  border: 1px dashed var(--primary);
   box-shadow: none;
 }
 
+.button.danger,
 button.danger {
-  background-color: var(--danger);
+  background: linear-gradient(135deg, #d9534f, #b13c38);
+  border-color: #b13c38;
+  color: #fff;
+}
+
+.button.compact {
+  padding: 0.55rem 0.9rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
 }
 
 .table-wrapper {

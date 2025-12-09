@@ -14,8 +14,8 @@
     <input type="text" id="database" name="database" value="{{ person['database'] }}" required />
 
     <div class="actions-inline">
-      <a class="button secondary" href="{{ url_for('list_people') }}">Cancelar</a>
-      <button type="submit">Salvar alterações</button>
+      <a class="button secondary" href="{{ url_for('list_people') }}"><span class="icon">↩</span><span>Cancelar</span></a>
+      <button type="submit" class="button"><span class="icon">💾</span><span>Salvar alterações</span></button>
     </div>
   </form>
 </section>
