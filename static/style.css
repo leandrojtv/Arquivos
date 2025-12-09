@@ -283,13 +283,14 @@ button:hover,
 .button.secondary {
   background: linear-gradient(135deg, #5e6d78, #4c5861);
   border-color: #5e6d78;
+  color: #fff;
 }
 
 .button.ghost {
-  background-color: rgba(255, 255, 255, 0.12);
-  color: var(--primary);
-  border: 1px dashed var(--primary);
-  box-shadow: none;
+  background: linear-gradient(135deg, rgba(13, 156, 224, 0.85), rgba(10, 125, 176, 0.85));
+  color: #fff;
+  border: 1px dashed #0a7db0;
+  box-shadow: 0 10px 25px rgba(11, 127, 171, 0.2);
 }
 
 .button.danger,
@@ -403,10 +404,10 @@ table td.compact {
 }
 
 .icon-button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: #1f2933;
-  box-shadow: none;
+  background: linear-gradient(135deg, var(--primary), #0a7db0);
+  border: 1px solid var(--primary);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(11, 127, 171, 0.25);
   border-radius: 50%;
   width: 36px;
   height: 36px;
