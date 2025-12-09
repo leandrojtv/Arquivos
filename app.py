@@ -1,15 +1,26 @@
+import os
 import sqlite3
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "people.db"
+DATA_DIR = BASE_DIR / "data"
+LEGACY_DB = BASE_DIR / "people.db"
+if os.environ.get("DATABASE_PATH"):
+    DB_PATH = Path(os.environ["DATABASE_PATH"])
+elif LEGACY_DB.exists():
+    DB_PATH = LEGACY_DB
+else:
+    DB_PATH = DATA_DIR / "people.db"
+
+DB_PATH = DB_PATH.resolve()
 
 app = Flask(__name__)
 app.secret_key = "change-me"  # Needed for flash messages.
 
 
 def init_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         """
