@@ -664,14 +664,15 @@ def landing():
 @app.route("/relatorios")
 @login_required
 def reports():
-    coverage = query_db(
+    coverage_rows = query_db(
         """
-        SELECT
-            SUM(CASE WHEN gestor_id IS NULL THEN 1 ELSE 0 END) AS sem_gestor,
-            SUM(CASE WHEN gestor_id IS NOT NULL THEN 1 ELSE 0 END) AS com_gestor
-        FROM bases
+        SELECT COALESCE(NULLIF(TRIM(g.nome), ''), 'Sem gestor') AS label, COUNT(*) AS total
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        GROUP BY label
+        ORDER BY total DESC, label ASC
         """
-    )[0]
+    )
     coord_rows = query_db(
         """
         SELECT COALESCE(g.coordenacao, 'Sem coordenação') as label, COUNT(*) as total
@@ -692,9 +693,9 @@ def reports():
 
     data = {
         "total_gestors": query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"],
-        "total_bases": (coverage["sem_gestor"] or 0) + (coverage["com_gestor"] or 0),
-        "coverage_labels": ["Com gestor", "Sem gestor"],
-        "coverage_values": [coverage["com_gestor"] or 0, coverage["sem_gestor"] or 0],
+        "total_bases": sum((row["total"] or 0) for row in coverage_rows),
+        "coverage_labels": [row["label"] or "Sem gestor" for row in coverage_rows],
+        "coverage_values": [row["total"] for row in coverage_rows],
         "coord_labels": [row["label"] or "Sem coordenação" for row in coord_rows],
         "coord_values": [row["total"] for row in coord_rows],
         "env_labels": [row["label"] or "Sem ambiente" for row in env_rows],

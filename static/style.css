@@ -776,6 +776,24 @@ table td.compact {
   flex-wrap: wrap;
 }
 
+.stat-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.layout-toggle .ghost {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, rgba(15, 111, 237, 0.16), rgba(12, 89, 190, 0.12));
+  color: #fff;
+}
+
+.layout-toggle .ghost:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -796,6 +814,10 @@ table td.compact {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
+}
+
+.reports-grid.stacked {
+  grid-template-columns: 1fr;
 }
 
 .chart-card {
