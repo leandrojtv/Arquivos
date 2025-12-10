@@ -5,6 +5,8 @@ Aplicação web simples construída com Flask + SQLite para registrar gestores (
 ## Pré-requisitos
 
 - Python 3.10+
+- Para uso do JDBC do Teradata, mantenha um JRE instalado (já incluído na imagem Docker sugerida) e tenha o(s) JAR(es) do drive
+r disponível.
 
 ## Como executar (ambiente local)
 
@@ -45,6 +47,34 @@ A aplicação ficará disponível em `http://localhost:8000`.
 4. **Encerrar** com `CTRL+C` ou executando `docker stop cadastro-gestores` em outro terminal.
 
 > Dica: para atualizar o código, pare o contêiner, execute novamente `docker build ...` e suba o contêiner com o novo build.
+
+### Driver JDBC do Teradata
+
+A aplicação procura automaticamente os JARs do Teradata no diretório `drivers/teradata` (ou no caminho definido pela variáve
+l `TERADATA_JDBC_DIR`). Após copiar os drivers para essa pasta, basta reiniciar o servidor ou contêiner para que eles sejam us
+ados no teste de conexão e na extração.
+
+**Passo a passo (ambiente local):**
+
+1. Crie a pasta de drivers se ainda não existir: `mkdir -p drivers/teradata`.
+2. Copie o JAR do Teradata (ex.: `terajdbc4.jar`, `tdgssconfig.jar`) para dentro de `drivers/teradata`.
+3. Inicie ou reinicie o Flask com `flask --app app run` (o carregamento ocorre no start).
+
+**Passo a passo (Docker):**
+
+1. Antes de subir o contêiner, coloque os JARs na pasta local `drivers/teradata`.
+2. Monte a pasta no contêiner (somente leitura) ou inclua no build:
+   ```bash
+   docker run --rm -it \
+     -p 8000:8000 \
+     -v $(pwd)/data:/app/data \
+     -v $(pwd)/drivers/teradata:/app/drivers/teradata:ro \
+     --name cadastro-gestores \
+     cadastro-gestores:latest
+   ```
+3. Caso prefira embutir no build, mantenha os JARs em `drivers/teradata` antes do `docker build`.
+
+Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JARs.
 
 ## Funcionalidades
 

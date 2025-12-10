@@ -1,4 +1,5 @@
 import csv
+import importlib
 import os
 import sqlite3
 import unicodedata
@@ -21,6 +22,9 @@ from openpyxl import load_workbook
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 LEGACY_DB = BASE_DIR / "people.db"
+TERADATA_DRIVER_DIR = Path(
+    os.environ.get("TERADATA_JDBC_DIR", BASE_DIR / "drivers" / "teradata")
+).resolve()
 if os.environ.get("DATABASE_PATH"):
     DB_PATH = Path(os.environ["DATABASE_PATH"])
 elif LEGACY_DB.exists():
@@ -29,6 +33,7 @@ else:
     DB_PATH = DATA_DIR / "people.db"
 
 DB_PATH = DB_PATH.resolve()
+TERADATA_DRIVER_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.secret_key = "change-me"  # Needed for flash messages.
@@ -245,6 +250,17 @@ def execute_db(query, params=()):
     conn.close()
 
 
+def load_optional_module(module_name):
+    spec = importlib.util.find_spec(module_name)
+    if not spec:
+        return None
+    return importlib.import_module(module_name)
+
+
+def find_teradata_jars():
+    return [jar for jar in TERADATA_DRIVER_DIR.glob("*.jar") if jar.is_file()]
+
+
 def normalize_field(label: str) -> str:
     cleaned = (
         unicodedata.normalize("NFKD", label)
@@ -447,47 +463,82 @@ def build_jdbc_url(host, database_name, connection_type, extra_params):
     return f"jdbc:teradata://{host}/{formatted}" if formatted else f"jdbc:teradata://{host}"
 
 
-def test_teradata_connection(config):
+def open_teradata_connection(config):
     jdbc_url = config.get("jdbc_url")
     username = config.get("username")
     password = config.get("password")
     if not jdbc_url or not username or not password:
-        return False, "Preencha JDBC, usuário e senha para testar."
-    try:
-        import teradatasql  # type: ignore
+        raise ValueError("Preencha JDBC, usuário e senha para conectar.")
 
-        with teradatasql.connect(url=jdbc_url, user=username, password=password):
-            pass
+    errors = []
+    teradatasql = load_optional_module("teradatasql")
+    if teradatasql:
+        try:
+            conn = teradatasql.connect(url=jdbc_url, user=username, password=password)
+            return conn, "python"
+        except Exception as exc:  # pragma: no cover - depende do driver
+            errors.append(f"Driver Python falhou: {exc}")
+
+    jdbc_jars = find_teradata_jars()
+    jaydebeapi = load_optional_module("jaydebeapi")
+    if not jdbc_jars:
+        errors.append(f"Driver JDBC não encontrado em {TERADATA_DRIVER_DIR}")
+    if not jaydebeapi:
+        errors.append("Dependências JDBC ausentes (jaydebeapi/JPype1 não instaladas)")
+    if jdbc_jars and jaydebeapi:
+        try:
+            conn = jaydebeapi.connect(
+                "com.teradata.jdbc.TeraDriver",
+                jdbc_url,
+                {"user": username, "password": password},
+                [str(j) for j in jdbc_jars],
+            )
+            return conn, "jdbc"
+        except Exception as exc:  # pragma: no cover - depende do driver
+            errors.append(f"Falha ao usar driver JDBC: {exc}")
+
+    if not errors:
+        errors.append("Driver Teradata não está disponível.")
+    raise RuntimeError("; ".join(errors))
+
+
+def test_teradata_connection(config):
+    try:
+        conn, _ = open_teradata_connection(config)
+        conn.close()
         return True, "Conexão bem-sucedida."
-    except Exception as exc:  # pragma: no cover - driver pode não estar disponível
-        return False, f"Não foi possível conectar: {exc}" if str(exc) else "Falha ao conectar com o driver JDBC."
+    except Exception as exc:  # pragma: no cover - ambiente varia
+        extra = ""
+        if not find_teradata_jars():
+            extra = f" Copie o JDBC para {TERADATA_DRIVER_DIR} e reinicie a aplicação."
+        return False, f"Não foi possível conectar: {exc}.{extra}" if str(exc) else "Falha ao conectar com o driver JDBC."
 
 
 def fetch_teradata_metadata(config):
     # Placeholder simples: tenta usar o driver se existir, caso contrário devolve amostra.
-    jdbc_url = config.get("jdbc_url")
-    username = config.get("username")
-    password = config.get("password")
     database_name = config.get("database_name") or "database"
     sample_note = None
     try:
-        import teradatasql  # type: ignore
-
+        conn, _ = open_teradata_connection(config)
         query = """
            select d.DatabaseName, d.CommentString
            FROM DBC.DatabasesV AS d
            where DBKind = 'D'
         """
-        with teradatasql.connect(url=jdbc_url, user=username, password=password) as con:
-            cur = con.cursor()
-            cur.execute(query)
-            rows = cur.fetchall()
-            return [
-                {"DatabaseName": row[0], "CommentString": row[1] if len(row) > 1 else ""}
-                for row in rows
-            ], None
-    except Exception:
-        sample_note = "Extração simulada (driver JDBC indisponível nesta execução)."
+        cur = conn.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
+        conn.close()
+        return [
+            {"DatabaseName": row[0], "CommentString": row[1] if len(row) > 1 else ""}
+            for row in rows
+        ], None
+    except Exception as exc:
+        sample_note = (
+            f"Extração simulada (driver JDBC indisponível nesta execução: {exc})."
+            if str(exc)
+            else "Extração simulada (driver JDBC indisponível nesta execução)."
+        )
 
     return [
         {"DatabaseName": database_name, "CommentString": "Base importada via simulação."},
