@@ -50,7 +50,7 @@ A aplicação ficará disponível em `http://localhost:8000`.
 
 - Landing page com atalho para cadastro de gestores e bases.
 - Cadastro e listagem de gestores (nome, secretaria, coordenação e e-mail).
-- Cadastro e listagem de bases (nome, ambiente, descrição) vinculando gestor titular obrigatório e até dois substitutos pesquisáveis e opcionais.
+- Cadastro e listagem de bases (nome, ambiente opcional, descrição opcional) vinculando gestor titular obrigatório e até dois substitutos pesquisáveis e opcionais.
 - Pesquisa de bases por nome, ambiente, descrição ou gestor.
 - Edição e exclusão tanto de gestores (quando não vinculados) quanto de bases.
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
@@ -78,5 +78,5 @@ A aplicação ficará disponível em `http://localhost:8000`.
 
 1. Acesse o menu **Importar** e escolha **Importar bases**.
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
-3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Ambiente`, `Descrição`, `Gestor`) e, se desejar, informe as colunas de **1º** e **2º substitutos**.
-4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos, mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.
+3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Gestor`) e, se desejar, informe também `Ambiente`, `Descrição` e as colunas de **1º** e **2º substitutos**.
+4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos (quando informados), mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.

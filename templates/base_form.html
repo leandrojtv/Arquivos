@@ -15,15 +15,16 @@
       <input type="text" name="name" value="{{ base['name'] if base else '' }}" required />
     </label>
     <label>Ambiente
-      <select name="ambiente" required>
+      <select name="ambiente">
         {% set current = base['ambiente'] if base else '' %}
+        <option value="" {% if not current %}selected{% endif %}>Ambiente (opcional)</option>
         {% for option in ['Produção', 'Homologação', 'Desenvolvimento', 'DataLab'] %}
           <option value="{{ option }}" {% if option == current %}selected{% endif %}>{{ option }}</option>
         {% endfor %}
       </select>
     </label>
     <label>Descrição
-      <textarea name="descricao" rows="3" required>{{ base['descricao'] if base else '' }}</textarea>
+      <textarea name="descricao" rows="3" placeholder="Descreva a base (opcional)">{{ base['descricao'] or '' if base else '' }}</textarea>
     </label>
     <div class="grid two">
       <label>Gestor titular

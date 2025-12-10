@@ -56,8 +56,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS bases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            ambiente TEXT NOT NULL,
-            descricao TEXT NOT NULL,
+            ambiente TEXT,
+            descricao TEXT,
             gestor_id INTEGER NOT NULL,
             substituto1_id INTEGER,
             substituto2_id INTEGER,
@@ -97,7 +97,14 @@ def migrate_bases_nullable():
         return
 
     notnull_map = {col[1]: bool(col[3]) for col in columns}
-    needs_migration = notnull_map.get("substituto1_id") or notnull_map.get("substituto2_id")
+    needs_migration = any(
+        [
+            notnull_map.get("substituto1_id"),
+            notnull_map.get("substituto2_id"),
+            notnull_map.get("ambiente"),
+            notnull_map.get("descricao"),
+        ]
+    )
 
     if not needs_migration:
         conn.close()
@@ -109,8 +116,8 @@ def migrate_bases_nullable():
         CREATE TABLE bases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            ambiente TEXT NOT NULL,
-            descricao TEXT NOT NULL,
+            ambiente TEXT,
+            descricao TEXT,
             gestor_id INTEGER NOT NULL,
             substituto1_id INTEGER,
             substituto2_id INTEGER,
@@ -473,8 +480,8 @@ def add_base():
     sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
     sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
 
-    if not all([name, ambiente, descricao]):
-        flash("Preencha todos os campos da base.", "error")
+    if not name:
+        flash("Informe o nome da base.", "error")
         return redirect(url_for("new_base_form"))
 
     if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
@@ -497,7 +504,7 @@ def add_base():
         INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (name, ambiente, descricao, gestor_id, sub1_id, sub2_id),
+        (name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id),
     )
     flash("Base cadastrada com sucesso.", "success")
     return redirect(url_for("list_bases"))
@@ -525,8 +532,8 @@ def update_base(base_id):
     sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
     sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
 
-    if not all([name, ambiente, descricao]):
-        flash("Preencha todos os campos da base.", "error")
+    if not name:
+        flash("Informe o nome da base.", "error")
         return redirect(url_for("edit_base", base_id=base_id))
 
     if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
@@ -550,7 +557,7 @@ def update_base(base_id):
         SET name = ?, ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?
         WHERE id = ?
         """,
-        (name, ambiente, descricao, gestor_id, sub1_id, sub2_id, base_id),
+        (name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id, base_id),
     )
     flash("Base atualizada.", "success")
     return redirect(url_for("list_bases"))
@@ -780,9 +787,9 @@ def import_bases_flow():
             "sub2": request.form.get("map_sub2"),
         }
 
-        required_fields = [mapping["name"], mapping["ambiente"], mapping["descricao"], mapping["gestor"]]
+        required_fields = [mapping["name"], mapping["gestor"]]
         if not all(required_fields):
-            flash("Mapeie ao menos os campos obrigatórios (Base, Ambiente, Descrição e Gestor).", "error")
+            flash("Mapeie ao menos Base e Gestor titular para continuar.", "error")
             return redirect(url_for("import_bases_flow", step="mapear"))
 
         bucket["mapping"] = mapping
@@ -800,25 +807,30 @@ def import_bases_flow():
         prepared = []
 
         header_set = set(headers)
-        required_map = [mapping["name"], mapping["ambiente"], mapping["descricao"], mapping["gestor"]]
+        required_map = [mapping["name"], mapping["gestor"]]
 
         for row in rows:
             missing_cols = [col for col in required_map if col not in header_set]
-            optional_cols = [mapping.get("sub1"), mapping.get("sub2")]
+            optional_cols = [
+                mapping.get("ambiente"),
+                mapping.get("descricao"),
+                mapping.get("sub1"),
+                mapping.get("sub2"),
+            ]
             missing_optional = [col for col in optional_cols if col and col not in header_set]
             if missing_cols or missing_optional:
                 errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
                 break
 
             name = row.get(mapping["name"], "").strip()
-            ambiente = row.get(mapping["ambiente"], "").strip()
-            descricao = row.get(mapping["descricao"], "").strip()
+            ambiente = row.get(mapping["ambiente"], "").strip() if mapping.get("ambiente") else ""
+            descricao = row.get(mapping["descricao"], "").strip() if mapping.get("descricao") else ""
             gestor_name = row.get(mapping["gestor"], "").strip()
             sub1_name = row.get(mapping.get("sub1"), "").strip() if mapping.get("sub1") else ""
             sub2_name = row.get(mapping.get("sub2"), "").strip() if mapping.get("sub2") else ""
 
-            if not all([name, ambiente, descricao, gestor_name]):
-                errors.append("Linha ignorada por falta de campos obrigatórios.")
+            if not all([name, gestor_name]):
+                errors.append("Linha ignorada por falta de base ou gestor titular.")
                 continue
 
             gestor_id = gestor_id_by_name(gestor_name)
@@ -848,7 +860,7 @@ def import_bases_flow():
                 errors.append("Gestor titular não pode repetir um substituto.")
                 continue
 
-            prepared.append((name, ambiente, descricao, gestor_id, sub1_id, sub2_id))
+            prepared.append((name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id))
 
         if prepared:
             bulk_insert_bases(prepared)
@@ -880,8 +892,8 @@ def import_bases_flow():
             preview.append(
                 {
                     "name": row.get(mapping.get("name"), ""),
-                    "ambiente": row.get(mapping.get("ambiente"), ""),
-                    "descricao": row.get(mapping.get("descricao"), ""),
+                    "ambiente": row.get(mapping.get("ambiente"), "") if mapping.get("ambiente") else "",
+                    "descricao": row.get(mapping.get("descricao"), "") if mapping.get("descricao") else "",
                     "gestor": row.get(mapping.get("gestor"), ""),
                     "sub1": row.get(mapping.get("sub1"), ""),
                     "sub2": row.get(mapping.get("sub2"), ""),

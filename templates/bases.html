@@ -27,8 +27,8 @@
           {% for base in bases %}
             <tr>
               <td>{{ base['name'] }}</td>
-              <td>{{ base['ambiente'] }}</td>
-              <td>{{ base['descricao'] }}</td>
+              <td>{{ base['ambiente'] or '—' }}</td>
+              <td>{{ base['descricao'] or '—' }}</td>
               <td>{{ base['gestor_name'] }}</td>
               <td>{{ base['sub1_name'] or '—' }}</td>
               <td>{{ base['sub2_name'] or '—' }}</td>

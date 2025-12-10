@@ -37,7 +37,7 @@
     <div class="wizard-step">3. Importação</div>
   </div>
   <form action="{{ url_for('import_bases_flow', step='mapear') }}" method="post" class="card">
-    <p class="form-helper">Escolha de qual coluna do arquivo virá cada informação da base. Titular é obrigatório, substitutos são opcionais.</p>
+    <p class="form-helper">Escolha de qual coluna do arquivo virá cada informação da base. Titular é obrigatório; ambiente e descrição são opcionais.</p>
     <div class="grid-two">
       <div>
         <label for="map_name">Nome da base</label>
@@ -48,15 +48,15 @@
       </div>
       <div>
         <label for="map_ambiente">Ambiente</label>
-        <select name="map_ambiente" id="map_ambiente" required>
-          <option value="">Selecione</option>
+        <select name="map_ambiente" id="map_ambiente">
+          <option value="">Ignorar (opcional)</option>
           {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
         </select>
       </div>
       <div>
         <label for="map_descricao">Descrição</label>
-        <select name="map_descricao" id="map_descricao" required>
-          <option value="">Selecione</option>
+        <select name="map_descricao" id="map_descricao">
+          <option value="">Ignorar (opcional)</option>
           {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
         </select>
       </div>
@@ -125,8 +125,8 @@
           {% for row in preview %}
           <tr>
             <td>{{ row.name }}</td>
-            <td>{{ row.ambiente }}</td>
-            <td>{{ row.descricao }}</td>
+            <td>{{ row.ambiente or '—' }}</td>
+            <td>{{ row.descricao or '—' }}</td>
             <td>{{ row.gestor }}</td>
             <td>{{ row.sub1 or '—' }}</td>
             <td>{{ row.sub2 or '—' }}</td>
@@ -135,7 +135,7 @@
         </tbody>
       </table>
     </div>
-    <p class="form-helper">Total de linhas encontradas: {{ total }}. Linhas sem gestor titular ou campos obrigatórios serão ignoradas.</p>
+    <p class="form-helper">Total de linhas encontradas: {{ total }}. Linhas sem gestor titular ou base serão ignoradas.</p>
     <form action="{{ url_for('import_bases_flow', step='executar') }}" method="post" class="actions-inline">
       <a class="button ghost" href="{{ url_for('import_bases_flow', step='mapear') }}"><span class="icon">↩</span><span>Voltar</span></a>
       <button type="submit" class="button"><span class="icon">🚀</span><span>Iniciar importação</span></button>
