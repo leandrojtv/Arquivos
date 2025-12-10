@@ -86,9 +86,8 @@
       <button type="button" class="icon-button close-modal" data-target="gestor-picker-modal" aria-label="Fechar"><span class="icon">✕</span></button>
     </header>
     <div class="picker-search">
-      <label>Buscar gestor
-        <input type="search" id="gestor-search" placeholder="Digite parte do nome, secretaria ou coordenação" />
-      </label>
+      <label for="gestor-search" class="picker-search-label">Buscar gestor</label>
+      <input type="search" id="gestor-search" class="picker-search-input" placeholder="Digite parte do nome, secretaria ou coordenação" />
     </div>
     <div class="picker-results" id="gestor-picker-results"></div>
     <div class="modal-actions">
@@ -118,7 +117,10 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'picker-option' + (stagedSelection && stagedSelection.id === item.id ? ' active' : '');
-      btn.innerHTML = `<span class="icon">👤</span><div><strong>${item.label}</strong></div>`;
+      const labelWrapper = document.createElement('div');
+      labelWrapper.className = 'picker-option-text';
+      labelWrapper.textContent = item.label;
+      btn.appendChild(labelWrapper);
       btn.addEventListener('click', () => {
         stagedSelection = { id: item.id, label: item.label };
         renderGestorList(term);

@@ -895,6 +895,29 @@ table td.compact {
   margin-bottom: 0.9rem;
 }
 
+.picker-search-label {
+  display: block;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.35rem;
+}
+
+.picker-search-input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.picker-search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--glow);
+}
+
 .picker-results {
   display: grid;
   gap: 0.5rem;
@@ -920,8 +943,9 @@ table td.compact {
   text-align: left;
 }
 
-.picker-option .icon {
-  font-size: 1.1rem;
+.picker-option-text {
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .picker-option:hover {
