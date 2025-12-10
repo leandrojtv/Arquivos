@@ -164,8 +164,8 @@
     <div class="wizard-step done">3. Agenda</div>
     <div class="wizard-step active">4. Extração</div>
   </div>
-  <div class="card">
-    <div class="grid-two">
+  <div class="card spacious">
+    <div class="grid-two wide-left">
       <div>
         <p class="eyebrow">Resumo</p>
         <div class="info-grid">
@@ -176,14 +176,21 @@
         <div class="summary-list compact">
           <div><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</div>
           <div><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</div>
-          <div>
-            <strong>Agenda:</strong>
-            {% if selected_schedule %}
-              {{ selected_schedule['name'] }} · {{ humanize_days(selected_schedule['days_of_week']) }}{% if selected_schedule['start_time'] %} às {{ selected_schedule['start_time'] }}{% endif %}
-            {% else %}
-              Execução única
-            {% endif %}
+        </div>
+        <div class="card inset schedule-callout">
+          <div class="badge">Schedule</div>
+          {% if selected_schedule %}
+          <div class="muted">{{ selected_schedule['name'] }}</div>
+          <div class="schedule-grid">
+            <div><strong>Dias:</strong> {{ humanize_days(selected_schedule['days_of_week']) or '—' }}</div>
+            <div><strong>Hora:</strong> {{ selected_schedule['start_time'] or '—' }}</div>
+            <div><strong>Início:</strong> {{ selected_schedule['start_date'] or '—' }}</div>
+            <div><strong>Intervalo:</strong> {{ selected_schedule['interval_minutes'] or '—' }} min</div>
+            <div><strong>Modo:</strong> {% if selected_schedule['repeat_forever'] %}Recorrente{% else %}Parar ao concluir{% endif %}</div>
           </div>
+          {% else %}
+          <p class="subtitle">Execução única; nenhuma agenda vinculada.</p>
+          {% endif %}
         </div>
       </div>
       <div>

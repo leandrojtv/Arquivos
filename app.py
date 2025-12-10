@@ -449,7 +449,7 @@ def create_extraction_job(
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at)
+        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
@@ -467,6 +467,7 @@ def create_extraction_job(
             1 if run_once else 0,
             status,
             next_run_at,
+            None,
         ),
     )
     conn.commit()
