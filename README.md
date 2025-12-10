@@ -54,6 +54,7 @@ A aplicação ficará disponível em `http://localhost:8000`.
 - Pesquisa de bases por nome, ambiente, descrição ou gestor.
 - Edição e exclusão tanto de gestores (quando não vinculados) quanto de bases.
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
+- Importação em massa de bases com mapeamento de colunas, gestor titular obrigatório e substitutos opcionais vinculados pelo nome.
 - Mensagens de feedback em todas as operações.
 - Menu do usuário no topo para acessar **Configurações**, logout e abrir a modal **Novo** para escolher entre cadastrar gestor ou base.
 - Página de gestão de usuários para criar, redefinir senha ou remover acessos (exceto o administrador padrão).
@@ -72,3 +73,10 @@ A aplicação ficará disponível em `http://localhost:8000`.
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Na etapa **Mapeamento**, associe cada campo do gestor (`Nome`, `Secretaria`, `Coordenação`, `E-mail`) a uma coluna do arquivo — você pode escolher qualquer coluna disponível.
 4. Revise o resumo e inicie a importação na etapa final. O progresso, total processado e eventuais avisos são exibidos na tela, com opção de reiniciar ou voltar aos gestores.
+
+## Importar bases via arquivo
+
+1. Acesse o menu **Importar** e escolha **Importar bases**.
+2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
+3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Ambiente`, `Descrição`, `Gestor`) e, se desejar, informe as colunas de **1º** e **2º substitutos**.
+4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos, mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.

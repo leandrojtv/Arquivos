@@ -170,6 +170,19 @@ def bulk_insert(records):
     conn.close()
 
 
+def bulk_insert_bases(records):
+    conn = sqlite3.connect(DB_PATH)
+    conn.executemany(
+        """
+        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        records,
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_import_bucket():
     token = session.get("import_token")
     if not token:
@@ -180,9 +193,19 @@ def get_import_bucket():
     return IMPORT_CACHE[token]
 
 
-def clear_import_state():
+def get_flow_bucket(flow):
     bucket = get_import_bucket()
-    bucket.clear()
+    if flow not in bucket:
+        bucket[flow] = {}
+    return bucket[flow]
+
+
+def clear_import_state(flow=None):
+    bucket = get_import_bucket()
+    if flow:
+        bucket.pop(flow, None)
+    else:
+        bucket.clear()
 
 
 def login_required(view_func):
@@ -293,6 +316,15 @@ def parse_gestor_id(raw_value):
         return int(candidate)
     except ValueError:
         return None
+
+
+def gestor_id_by_name(name):
+    if not name:
+        return None
+    result = query_db("SELECT id FROM gestors WHERE name = ? COLLATE NOCASE", (name.strip(),))
+    if result:
+        return result[0]["id"]
+    return None
 
 
 @app.route("/gestores")
@@ -559,13 +591,13 @@ def import_records():
     return render_template("import.html")
 
 
-def require_import_data():
-    bucket = get_import_bucket()
+def require_import_data(flow):
+    bucket = get_flow_bucket(flow)
     headers = bucket.get("headers") or []
     rows = bucket.get("rows") or []
     if not headers or not rows:
         flash("Envie um arquivo para começar o fluxo de importação.", "error")
-        clear_import_state()
+        clear_import_state(flow)
         return None, None
     return headers, rows
 
@@ -574,7 +606,8 @@ def require_import_data():
 @login_required
 def import_gestors_flow():
     step = request.args.get("step", "upload")
-    bucket = get_import_bucket()
+    flow = "gestores"
+    bucket = get_flow_bucket(flow)
 
     if request.method == "POST" and step == "upload":
         upload = request.files.get("file")
@@ -601,7 +634,7 @@ def import_gestors_flow():
         return redirect(url_for("import_gestors_flow", step="mapear"))
 
     if request.method == "POST" and step == "mapear":
-        headers, rows = require_import_data()
+        headers, rows = require_import_data(flow)
         if headers is None:
             return redirect(url_for("import_gestors_flow"))
 
@@ -620,7 +653,7 @@ def import_gestors_flow():
         return redirect(url_for("import_gestors_flow", step="confirmar"))
 
     if request.method == "POST" and step == "executar":
-        headers, rows = require_import_data()
+        headers, rows = require_import_data(flow)
         mapping = bucket.get("mapping")
         if headers is None or not mapping:
             return redirect(url_for("import_gestors_flow"))
@@ -662,13 +695,13 @@ def import_gestors_flow():
         return redirect(url_for("import_gestors_flow", step="resultado"))
 
     if step == "mapear":
-        headers, rows = require_import_data()
+        headers, rows = require_import_data(flow)
         if headers is None:
             return redirect(url_for("import_gestors_flow"))
         return render_template("import_gestors.html", step="mapear", headers=headers, preview=rows[:5])
 
     if step == "confirmar":
-        headers, rows = require_import_data()
+        headers, rows = require_import_data(flow)
         mapping = bucket.get("mapping")
         if headers is None or not mapping:
             return redirect(url_for("import_gestors_flow"))
@@ -698,8 +731,179 @@ def import_gestors_flow():
             return redirect(url_for("import_gestors_flow"))
         return render_template("import_gestors.html", step="resultado", result=result)
 
-    clear_import_state()
+    clear_import_state(flow)
     return render_template("import_gestors.html", step="upload")
+
+
+@app.route("/importar/bases", methods=["GET", "POST"])
+@login_required
+def import_bases_flow():
+    step = request.args.get("step", "upload")
+    flow = "bases"
+    bucket = get_flow_bucket(flow)
+
+    if request.method == "POST" and step == "upload":
+        upload = request.files.get("file")
+        delimiter = request.form.get("delimiter", ";").strip() or ";"
+
+        if not upload or not upload.filename:
+            flash("Selecione um arquivo CSV ou XLSX para continuar.", "error")
+            return redirect(url_for("import_bases_flow"))
+
+        try:
+            headers, rows = parse_tabular(upload, delimiter)
+        except Exception:
+            flash("Não foi possível ler o arquivo. Confirme o formato e o delimitador.", "error")
+            return redirect(url_for("import_bases_flow"))
+
+        if not rows:
+            flash("Nenhuma linha encontrada para importar.", "error")
+            return redirect(url_for("import_bases_flow"))
+
+        bucket["headers"] = headers
+        bucket["rows"] = rows
+        bucket.pop("mapping", None)
+        bucket.pop("result", None)
+        return redirect(url_for("import_bases_flow", step="mapear"))
+
+    if request.method == "POST" and step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_bases_flow"))
+
+        mapping = {
+            "name": request.form.get("map_name"),
+            "ambiente": request.form.get("map_ambiente"),
+            "descricao": request.form.get("map_descricao"),
+            "gestor": request.form.get("map_gestor"),
+            "sub1": request.form.get("map_sub1"),
+            "sub2": request.form.get("map_sub2"),
+        }
+
+        required_fields = [mapping["name"], mapping["ambiente"], mapping["descricao"], mapping["gestor"]]
+        if not all(required_fields):
+            flash("Mapeie ao menos os campos obrigatórios (Base, Ambiente, Descrição e Gestor).", "error")
+            return redirect(url_for("import_bases_flow", step="mapear"))
+
+        bucket["mapping"] = mapping
+        return redirect(url_for("import_bases_flow", step="confirmar"))
+
+    if request.method == "POST" and step == "executar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_bases_flow"))
+
+        total = len(rows)
+        imported = 0
+        errors = []
+        prepared = []
+
+        header_set = set(headers)
+        required_map = [mapping["name"], mapping["ambiente"], mapping["descricao"], mapping["gestor"]]
+
+        for row in rows:
+            missing_cols = [col for col in required_map if col not in header_set]
+            optional_cols = [mapping.get("sub1"), mapping.get("sub2")]
+            missing_optional = [col for col in optional_cols if col and col not in header_set]
+            if missing_cols or missing_optional:
+                errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
+                break
+
+            name = row.get(mapping["name"], "").strip()
+            ambiente = row.get(mapping["ambiente"], "").strip()
+            descricao = row.get(mapping["descricao"], "").strip()
+            gestor_name = row.get(mapping["gestor"], "").strip()
+            sub1_name = row.get(mapping.get("sub1"), "").strip() if mapping.get("sub1") else ""
+            sub2_name = row.get(mapping.get("sub2"), "").strip() if mapping.get("sub2") else ""
+
+            if not all([name, ambiente, descricao, gestor_name]):
+                errors.append("Linha ignorada por falta de campos obrigatórios.")
+                continue
+
+            gestor_id = gestor_id_by_name(gestor_name)
+            if not gestor_id:
+                errors.append(f"Gestor '{gestor_name}' não encontrado.")
+                continue
+
+            sub1_id = None
+            sub2_id = None
+
+            if sub1_name:
+                sub1_id = gestor_id_by_name(sub1_name)
+                if not sub1_id:
+                    errors.append(f"1º substituto '{sub1_name}' não encontrado.")
+                    continue
+
+            if sub2_name:
+                sub2_id = gestor_id_by_name(sub2_name)
+                if not sub2_id:
+                    errors.append(f"2º substituto '{sub2_name}' não encontrado.")
+                    continue
+
+            if sub1_id and sub2_id and sub1_id == sub2_id:
+                errors.append("Substitutos precisam ser pessoas diferentes.")
+                continue
+            if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+                errors.append("Gestor titular não pode repetir um substituto.")
+                continue
+
+            prepared.append((name, ambiente, descricao, gestor_id, sub1_id, sub2_id))
+
+        if prepared:
+            bulk_insert_bases(prepared)
+            imported = len(prepared)
+
+        bucket["result"] = {
+            "total": total,
+            "imported": imported,
+            "errors": errors,
+            "progress": 100 if total else 0,
+        }
+        bucket["rows"] = prepared
+        return redirect(url_for("import_bases_flow", step="resultado"))
+
+    if step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_bases_flow"))
+        return render_template("import_bases.html", step="mapear", headers=headers, preview=rows[:5])
+
+    if step == "confirmar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_bases_flow"))
+
+        preview = []
+        for row in rows[:5]:
+            preview.append(
+                {
+                    "name": row.get(mapping.get("name"), ""),
+                    "ambiente": row.get(mapping.get("ambiente"), ""),
+                    "descricao": row.get(mapping.get("descricao"), ""),
+                    "gestor": row.get(mapping.get("gestor"), ""),
+                    "sub1": row.get(mapping.get("sub1"), ""),
+                    "sub2": row.get(mapping.get("sub2"), ""),
+                }
+            )
+
+        return render_template(
+            "import_bases.html",
+            step="confirmar",
+            mapping=mapping,
+            preview=preview,
+            total=len(rows),
+        )
+
+    if step == "resultado":
+        result = bucket.get("result")
+        if not result:
+            return redirect(url_for("import_bases_flow"))
+        return render_template("import_bases.html", step="resultado", result=result)
+
+    clear_import_state(flow)
+    return render_template("import_bases.html", step="upload")
 
 
 @app.route("/configuracoes")

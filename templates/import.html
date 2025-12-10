@@ -19,15 +19,15 @@
       </div>
       <span class="pill">CSV / XLSX</span>
     </a>
-    <div class="card action-card muted">
+    <a class="card action-card" href="{{ url_for('import_bases_flow') }}">
       <div class="icon-circle">🗂️</div>
       <div>
         <p class="eyebrow">Bases</p>
         <h3>Importar bases</h3>
-        <p>Em breve você poderá importar bases com validação de titulares e substitutos.</p>
+        <p>Importação em fluxo com titular obrigatório, substitutos opcionais e vínculo automático pelo nome do gestor.</p>
       </div>
-      <span class="pill">Breve</span>
-    </div>
+      <span class="pill">CSV / XLSX</span>
+    </a>
   </div>
 </section>
 {% endblock %}

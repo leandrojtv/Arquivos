@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Importar bases{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Importação guiada</p>
+      <h2>Importar bases</h2>
+      <p class="subtitle">Fluxo em três etapas para selecionar o arquivo, mapear as colunas e acompanhar a importação vinculando gestores.</p>
+    </div>
+    <div class="pill">Bases</div>
+  </div>
+
+  {% if step == 'upload' %}
+  <div class="wizard">
+    <div class="wizard-step active">1. Arquivo</div>
+    <div class="wizard-step">2. Mapeamento</div>
+    <div class="wizard-step">3. Importação</div>
+  </div>
+  <form action="{{ url_for('import_bases_flow', step='upload') }}" method="post" enctype="multipart/form-data" class="card">
+    <label for="file">Arquivo (CSV ou XLSX)</label>
+    <input type="file" name="file" id="file" accept=".csv,.xlsx,.xls" required />
+
+    <label for="delimiter">Delimitador (para CSV)</label>
+    <input type="text" name="delimiter" id="delimiter" value=";" maxlength="3" />
+    <p class="form-helper">Usado apenas em CSV. Para XLSX é ignorado.</p>
+
+    <div class="actions-inline">
+      <button type="submit" class="button"><span class="icon">⬆️</span><span>Continuar</span></button>
+      <a class="button ghost" href="{{ url_for('import_records') }}"><span class="icon">↩</span><span>Voltar</span></a>
+    </div>
+  </form>
+  {% elif step == 'mapear' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Arquivo</div>
+    <div class="wizard-step active">2. Mapeamento</div>
+    <div class="wizard-step">3. Importação</div>
+  </div>
+  <form action="{{ url_for('import_bases_flow', step='mapear') }}" method="post" class="card">
+    <p class="form-helper">Escolha de qual coluna do arquivo virá cada informação da base. Titular é obrigatório, substitutos são opcionais.</p>
+    <div class="grid-two">
+      <div>
+        <label for="map_name">Nome da base</label>
+        <select name="map_name" id="map_name" required>
+          <option value="">Selecione</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_ambiente">Ambiente</label>
+        <select name="map_ambiente" id="map_ambiente" required>
+          <option value="">Selecione</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_descricao">Descrição</label>
+        <select name="map_descricao" id="map_descricao" required>
+          <option value="">Selecione</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_gestor">Gestor titular (nome)</label>
+        <select name="map_gestor" id="map_gestor" required>
+          <option value="">Selecione</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_sub1">1º substituto (opcional)</label>
+        <select name="map_sub1" id="map_sub1">
+          <option value="">Ignorar</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_sub2">2º substituto (opcional)</label>
+        <select name="map_sub2" id="map_sub2">
+          <option value="">Ignorar</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>{% for col in headers %}<th>{{ col }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for row in preview %}
+          <tr>{% for col in headers %}<td>{{ row.get(col, '') }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('import_bases_flow') }}"><span class="icon">↩</span><span>Voltar</span></a>
+      <button type="submit" class="button"><span class="icon">➡️</span><span>Avançar</span></button>
+    </div>
+  </form>
+  {% elif step == 'confirmar' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Arquivo</div>
+    <div class="wizard-step done">2. Mapeamento</div>
+    <div class="wizard-step active">3. Importação</div>
+  </div>
+  <div class="card">
+    <p class="subtitle">Revise os campos que serão importados. Apenas linhas completas e com gestores existentes serão processadas.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Base</th>
+            <th>Ambiente</th>
+            <th>Descrição</th>
+            <th>Gestor</th>
+            <th>1º Substituto</th>
+            <th>2º Substituto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview %}
+          <tr>
+            <td>{{ row.name }}</td>
+            <td>{{ row.ambiente }}</td>
+            <td>{{ row.descricao }}</td>
+            <td>{{ row.gestor }}</td>
+            <td>{{ row.sub1 or '—' }}</td>
+            <td>{{ row.sub2 or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="form-helper">Total de linhas encontradas: {{ total }}. Linhas sem gestor titular ou campos obrigatórios serão ignoradas.</p>
+    <form action="{{ url_for('import_bases_flow', step='executar') }}" method="post" class="actions-inline">
+      <a class="button ghost" href="{{ url_for('import_bases_flow', step='mapear') }}"><span class="icon">↩</span><span>Voltar</span></a>
+      <button type="submit" class="button"><span class="icon">🚀</span><span>Iniciar importação</span></button>
+    </form>
+  </div>
+  {% elif step == 'resultado' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Arquivo</div>
+    <div class="wizard-step done">2. Mapeamento</div>
+    <div class="wizard-step done">3. Importação</div>
+  </div>
+  <div class="card">
+    <p class="subtitle">Acompanhe o progresso da importação.</p>
+    <div class="progress">
+      <div class="progress-bar" style="width: {{ result.progress }}%"></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{ result.imported }}</strong><span>Importados</span></div>
+      <div class="stat"><strong>{{ result.total }}</strong><span>Total</span></div>
+    </div>
+    {% if result.errors and result.errors|length %}
+    <div class="alert error">
+      <p>Ocorreram avisos durante o processo:</p>
+      <ul>
+        {% for err in result.errors %}
+        <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="alert success">Importação finalizada sem erros.</div>
+    {% endif %}
+    <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('import_bases_flow') }}"><span class="icon">🔁</span><span>Importar novamente</span></a>
+      <a class="button" href="{{ url_for('list_bases') }}"><span class="icon">📄</span><span>Ver bases</span></a>
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
