@@ -11,6 +11,7 @@ from pathlib import Path
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -987,21 +988,106 @@ def delete_base(base_id):
 @login_required
 def search():
     term = request.args.get("q", "").strip()
+    tipo = request.args.get("tipo", "bases").strip()
+    gestor = request.args.get("gestor", "").strip()
+    base_nome = request.args.get("base", "").strip()
+    ambiente = request.args.get("ambiente", "").strip()
+    fonte = request.args.get("fonte", "").strip()
+    descricao = request.args.get("descricao", "").strip()
+
+    should_search = any([term, gestor, base_nome, ambiente, fonte, descricao])
     results = []
-    if term:
-        like_term = f"%{term}%"
-        results = query_db(
-            """
+
+    if should_search and tipo == "bases":
+        conditions = []
+        params = []
+        if term:
+            like_term = f"%{term}%"
+            conditions.append(
+                "(b.name LIKE ? OR COALESCE(b.descricao, '') LIKE ? OR COALESCE(b.ambiente, '') LIKE ? OR COALESCE(g.name, '') LIKE ?)"
+            )
+            params.extend([like_term, like_term, like_term, like_term])
+        if gestor:
+            conditions.append("g.name LIKE ?")
+            params.append(f"%{gestor}%")
+        if base_nome:
+            conditions.append("b.name LIKE ?")
+            params.append(f"%{base_nome}%")
+        if descricao:
+            conditions.append("COALESCE(b.descricao, '') LIKE ?")
+            params.append(f"%{descricao}%")
+        if ambiente:
+            conditions.append("b.ambiente = ?")
+            params.append(ambiente)
+        if fonte:
+            conditions.append("b.source_connector = ?")
+            params.append(fonte)
+
+        query = """
             SELECT b.*, g.name as gestor_name
             FROM bases b
             LEFT JOIN gestors g ON g.id = b.gestor_id
-            WHERE b.name LIKE ? OR b.descricao LIKE ? OR g.name LIKE ? OR b.ambiente LIKE ?
-            ORDER BY b.id DESC
-            """,
-            (like_term, like_term, like_term, like_term),
-        )
+        """
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY b.id DESC"
+        results = query_db(query, tuple(params))
 
-    return render_template("search.html", query=term, results=results)
+    ambientes = query_db(
+        "SELECT DISTINCT ambiente FROM bases WHERE ambiente IS NOT NULL AND ambiente != '' ORDER BY ambiente"
+    )
+    fontes = query_db(
+        "SELECT DISTINCT source_connector FROM bases WHERE source_connector IS NOT NULL AND source_connector != '' ORDER BY source_connector"
+    )
+    gestores = query_db(
+        "SELECT DISTINCT name FROM gestors WHERE name IS NOT NULL AND name != '' ORDER BY name"
+    )
+
+    return render_template(
+        "search.html",
+        query=term,
+        results=results,
+        filters={
+            "tipo": tipo,
+            "gestor": gestor,
+            "base": base_nome,
+            "ambiente": ambiente,
+            "fonte": fonte,
+            "descricao": descricao,
+        },
+        options={
+            "ambientes": [row["ambiente"] for row in ambientes],
+            "fontes": [row["source_connector"] for row in fontes],
+            "gestores": [row["name"] for row in gestores],
+        },
+    )
+
+
+@app.route("/buscar/sugestoes")
+@login_required
+def search_suggestions():
+    term = request.args.get("q", "").strip()
+    suggestions = []
+    if term:
+        like = f"%{term}%"
+        base_rows = query_db(
+            "SELECT DISTINCT name FROM bases WHERE name LIKE ? ORDER BY name LIMIT 5", (like,)
+        )
+        gestor_rows = query_db(
+            "SELECT DISTINCT name FROM gestors WHERE name LIKE ? ORDER BY name LIMIT 5", (like,)
+        )
+        ambiente_rows = query_db(
+            "SELECT DISTINCT ambiente FROM bases WHERE ambiente LIKE ? AND ambiente IS NOT NULL ORDER BY ambiente LIMIT 5",
+            (like,),
+        )
+        for row in base_rows:
+            suggestions.append({"label": row["name"], "tipo": "Base"})
+        for row in gestor_rows:
+            suggestions.append({"label": row["name"], "tipo": "Gestor"})
+        for row in ambiente_rows:
+            suggestions.append({"label": row["ambiente"], "tipo": "Ambiente"})
+
+    return jsonify({"suggestions": suggestions})
 
 
 @app.route("/importar", methods=["GET", "POST"])

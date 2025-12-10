@@ -2,20 +2,77 @@
 {% block title %}Início{% endblock %}
 {% block content %}
 <section class="hero">
-  <div>
-    <p class="eyebrow">Bem-vindo</p>
-    <h2>Organize gestores e bases de dados com clareza.</h2>
-    <p class="subtitle">Primeiro cadastre os gestores e depois vincule-os às bases com seus substitutos.</p>
-    <div class="hero-actions">
-      <a class="button" href="{{ url_for('new_gestor_form') }}">Cadastrar gestor</a>
-      <a class="button ghost" href="{{ url_for('new_base_form') }}">Cadastrar base</a>
-      <a class="button secondary" href="{{ url_for('search') }}">Pesquisar bases</a>
+  <div class="hero-main">
+    <div class="search-hero card">
+      <p class="eyebrow">Pesquisa rápida</p>
+      <form action="{{ url_for('search') }}" method="get" class="search-hero-form" autocomplete="off">
+        <div class="search-hero-input">
+          <span class="icon">🔎</span>
+          <input type="text" id="landing-search" name="q" placeholder="Pesquise por base, gestor ou ambiente" />
+          <button type="submit" class="button secondary"><span class="icon">➡</span><span>Buscar</span></button>
+        </div>
+        <div class="search-hero-suggestions" id="landing-suggestions" aria-live="polite"></div>
+      </form>
+      <div class="quick-actions">
+        <a class="button" href="{{ url_for('new_gestor_form') }}"><span class="icon">👤</span><span>Cadastrar gestor</span></a>
+        <a class="button ghost" href="{{ url_for('new_base_form') }}"><span class="icon">🗂️</span><span>Cadastrar base</span></a>
+      </div>
+    </div>
+    <div class="hero-card">
+      <p class="stat-label">Resumo</p>
+      <p class="stat-value">{{ total_bases }} bases</p>
+      <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
+      <a class="button tertiary" href="{{ url_for('search') }}"><span class="icon">📑</span><span>Ver todos</span></a>
     </div>
   </div>
-  <div class="hero-card">
-    <p class="stat-label">Resumo</p>
-    <p class="stat-value">{{ total_bases }} bases</p>
-    <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
-  </div>
 </section>
+<script>
+  const landingSearch = document.getElementById('landing-search');
+  const landingSuggestions = document.getElementById('landing-suggestions');
+  let debounceTimer;
+
+  const renderSuggestions = (items = []) => {
+    landingSuggestions.innerHTML = '';
+    if (!items.length) {
+      landingSuggestions.classList.remove('open');
+      return;
+    }
+    items.forEach((item) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'suggestion-row';
+      button.innerHTML = `<span class="pill">${item.tipo}</span><span>${item.label}</span>`;
+      button.addEventListener('click', () => {
+        landingSearch.value = item.label;
+        landingSearch.form.submit();
+      });
+      landingSuggestions.appendChild(button);
+    });
+    landingSuggestions.classList.add('open');
+  };
+
+  const fetchSuggestions = (term) => {
+    if (!term || term.length < 2) {
+      renderSuggestions([]);
+      return;
+    }
+    fetch(`${window.location.origin}${"{{ url_for('search_suggestions') }}"}?q=${encodeURIComponent(term)}`)
+      .then((res) => res.json())
+      .then((data) => renderSuggestions(data.suggestions || []))
+      .catch(() => renderSuggestions([]));
+  };
+
+  if (landingSearch && landingSuggestions) {
+    landingSearch.addEventListener('input', (event) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => fetchSuggestions(event.target.value), 180);
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!landingSuggestions.contains(event.target) && event.target !== landingSearch) {
+        renderSuggestions([]);
+      }
+    });
+  }
+</script>
 {% endblock %}

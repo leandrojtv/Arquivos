@@ -1,62 +1,132 @@
 {% extends "base.html" %}
 {% block title %}Pesquisar{% endblock %}
 {% block content %}
-<section class="form-section">
+<section class="form-section search-shell">
   <div class="section-header">
     <div>
       <p class="eyebrow">Pesquisa</p>
-      <h2>Encontre uma base</h2>
-      <p class="subtitle">Busque pelo nome da base, ambiente, descrição ou gestor responsável.</p>
+      <h2>Busque em todos os cadastros</h2>
+      <p class="subtitle">Combine a busca geral com filtros avançados para refinar o resultado.</p>
     </div>
     <a class="link" href="{{ url_for('list_bases') }}">Voltar para as bases</a>
   </div>
-  <form action="{{ url_for('search') }}" method="get" class="card search-card">
-    <label for="q">Termo de pesquisa</label>
-    <div class="search-row">
-      <input type="text" id="q" name="q" value="{{ query }}" placeholder="Ex.: Produção, DataLab, Maria" />
-      <button type="submit" class="button secondary">
-        <span class="icon">🔍</span>
-        <span>Pesquisar</span>
-      </button>
-    </div>
-  </form>
-</section>
+  <div class="search-grid">
+    <aside class="filters-panel card">
+      <div class="filters-header">
+        <div>
+          <p class="eyebrow">Filtros</p>
+          <h3>Refine os resultados</h3>
+        </div>
+        <a class="link" href="{{ url_for('search') }}">Limpar</a>
+      </div>
+      <form action="{{ url_for('search') }}" method="get" class="filters-form">
+        <div class="input-group">
+          <label for="tipo">Tipo de ativo</label>
+          <select id="tipo" name="tipo">
+            <option value="bases" {% if filters.tipo == 'bases' %}selected{% endif %}>Bases de dados</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="gestor">Gestor</label>
+          <input type="text" id="gestor" name="gestor" value="{{ filters.gestor }}" list="gestor-opcoes" placeholder="Busque pelo nome" />
+          <datalist id="gestor-opcoes">
+            {% for nome in options.gestores %}
+              <option value="{{ nome }}"></option>
+            {% endfor %}
+          </datalist>
+        </div>
+        <div class="input-group">
+          <label for="base">Base de dados</label>
+          <input type="text" id="base" name="base" value="{{ filters.base }}" placeholder="Nome da base" />
+        </div>
+        <div class="input-group">
+          <label for="descricao">Descrição</label>
+          <input type="text" id="descricao" name="descricao" value="{{ filters.descricao }}" placeholder="Trecho da descrição" />
+        </div>
+        <div class="input-group">
+          <label for="ambiente">Ambiente</label>
+          <select id="ambiente" name="ambiente">
+            <option value="">Todos</option>
+            {% for ambiente in options.ambientes %}
+              <option value="{{ ambiente }}" {% if filters.ambiente == ambiente %}selected{% endif %}>{{ ambiente }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="fonte">Fonte</label>
+          <select id="fonte" name="fonte">
+            <option value="">Todas</option>
+            {% for fonte in options.fontes %}
+              <option value="{{ fonte }}" {% if filters.fonte == fonte %}selected{% endif %}>{{ fonte }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filters-footer">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <button type="submit" class="button secondary full">
+            <span class="icon">🎯</span><span>Aplicar filtros</span>
+          </button>
+        </div>
+      </form>
+    </aside>
 
-<section class="list-section">
-  <div class="section-header">
-    <div>
-      <p class="eyebrow">Resultados</p>
-      <h2>{% if query %}Encontramos {{ results|length }} resultado(s){% else %}Nada para exibir ainda{% endif %}</h2>
-      <p class="subtitle">{% if not query %}Digite um termo para iniciar a pesquisa.{% elif results|length == 0 %}Tente ajustar o termo para localizar cadastros correspondentes.{% else %}Filtre mais para refinar a busca.{% endif %}</p>
+    <div class="search-body">
+      <form action="{{ url_for('search') }}" method="get" class="card search-card">
+        <label for="q">Busca geral</label>
+        <input type="hidden" name="tipo" value="{{ filters.tipo }}" />
+        <input type="hidden" name="gestor" value="{{ filters.gestor }}" />
+        <input type="hidden" name="base" value="{{ filters.base }}" />
+        <input type="hidden" name="descricao" value="{{ filters.descricao }}" />
+        <input type="hidden" name="ambiente" value="{{ filters.ambiente }}" />
+        <input type="hidden" name="fonte" value="{{ filters.fonte }}" />
+        <div class="search-row">
+          <input type="text" id="q" name="q" value="{{ query }}" placeholder="Ex.: produção, DataLab, Maria" />
+          <button type="submit" class="button secondary">
+            <span class="icon">🔍</span>
+            <span>Pesquisar</span>
+          </button>
+        </div>
+        <p class="helper">A busca geral considera nome da base, gestor, ambiente e descrição.</p>
+      </form>
+
+      <section class="list-section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Resultados</p>
+            <h2>{% if results %}Encontramos {{ results|length }} resultado(s){% else %}Nada para exibir ainda{% endif %}</h2>
+            <p class="subtitle">{% if not query and not filters.gestor and not filters.base and not filters.descricao and not filters.ambiente and not filters.fonte %}Digite um termo ou defina filtros para começar.{% elif results|length == 0 %}Tente ajustar a busca ou filtros para localizar cadastros correspondentes.{% else %}Use os filtros ao lado para refinar ainda mais.{% endif %}</p>
+          </div>
+          <a class="link" href="{{ url_for('new_base_form') }}">Adicionar base</a>
+        </div>
+        {% if results %}
+          <table>
+            <thead>
+              <tr>
+                <th>Base</th>
+                <th>Ambiente</th>
+                <th>Gestor</th>
+                <th class="actions">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for base in results %}
+                <tr>
+                  <td>{{ base["name"] }}</td>
+                  <td>{{ base["ambiente"] or '—' }}</td>
+                  <td>{{ base["gestor_name"] }}</td>
+                  <td class="actions">
+                    <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
+                    <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
+                      <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      </section>
     </div>
-    <a class="link" href="{{ url_for('new_base_form') }}">Adicionar base</a>
   </div>
-  {% if results %}
-    <table>
-      <thead>
-        <tr>
-          <th>Base</th>
-          <th>Ambiente</th>
-          <th>Gestor</th>
-          <th class="actions">Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for base in results %}
-          <tr>
-            <td>{{ base["name"] }}</td>
-            <td>{{ base["ambiente"] or '—' }}</td>
-            <td>{{ base["gestor_name"] }}</td>
-            <td class="actions">
-              <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
-              <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
-                <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
 </section>
 {% endblock %}
