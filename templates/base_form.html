@@ -36,7 +36,7 @@
           <input type="hidden" name="gestor_id" id="gestor_id_input" value="{{ base['gestor_id'] if base else '' }}" required />
           <div class="selection-pill" id="gestor_label">{{ selected_labels['gestor'] if selected_labels else 'Selecione um gestor' }}</div>
           <button type="button" class="button ghost gestor-picker-trigger" data-target="gestor_id_input" data-label-target="gestor_label">
-            <span class="icon">👤</span><span>Escolher</span>
+            <svg class="icon"><use href="#icon-user-search"></use></svg><span>Escolher</span>
           </button>
         </div>
       </div>
@@ -49,7 +49,7 @@
           <input type="hidden" name="substituto1_id" id="sub1_id_input" value="{{ base['substituto1_id'] if base else '' }}" />
           <div class="selection-pill" id="sub1_label">{{ selected_labels['sub1'] if selected_labels else 'Nenhum selecionado' }}</div>
           <button type="button" class="button ghost gestor-picker-trigger" data-target="sub1_id_input" data-label-target="sub1_label">
-            <span class="icon">🔍</span><span>Buscar</span>
+            <svg class="icon"><use href="#icon-search"></use></svg><span>Buscar</span>
           </button>
         </div>
       </div>
@@ -62,15 +62,15 @@
           <input type="hidden" name="substituto2_id" id="sub2_id_input" value="{{ base['substituto2_id'] if base else '' }}" />
           <div class="selection-pill" id="sub2_label">{{ selected_labels['sub2'] if selected_labels else 'Nenhum selecionado' }}</div>
           <button type="button" class="button ghost gestor-picker-trigger" data-target="sub2_id_input" data-label-target="sub2_label">
-            <span class="icon">🧭</span><span>Buscar</span>
+            <svg class="icon"><use href="#icon-search"></use></svg><span>Buscar</span>
           </button>
         </div>
       </div>
     </div>
     <p class="helper">Use a pesquisa para localizar os gestores; o titular é obrigatório, e os substitutos são opcionais.</p>
     <div class="form-actions">
-      <a class="button ghost" href="{{ url_for('list_bases') }}"><span class="icon">↩</span><span>Cancelar</span></a>
-      <button type="submit" class="button"><span class="icon">💾</span><span>{{ 'Salvar alterações' if base else 'Cadastrar base' }}</span></button>
+      <a class="button ghost" href="{{ url_for('list_bases') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Cancelar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-save"></use></svg><span>{{ 'Salvar alterações' if base else 'Cadastrar base' }}</span></button>
     </div>
   </form>
 </section>
@@ -83,7 +83,7 @@
         <h3 id="gestor-picker-title">Busque pelo nome e escolha um gestor</h3>
         <p class="subtitle">Use a busca para filtrar rapidamente; confirme em "OK" para aplicar.</p>
       </div>
-      <button type="button" class="icon-button close-modal" data-target="gestor-picker-modal" aria-label="Fechar"><span class="icon">✕</span></button>
+      <button type="button" class="icon-button close-modal" data-target="gestor-picker-modal" aria-label="Fechar"><svg class="icon"><use href="#icon-close"></use></svg></button>
     </header>
     <div class="picker-search">
       <label for="gestor-search" class="picker-search-label">Buscar gestor</label>
@@ -91,8 +91,8 @@
     </div>
     <div class="picker-results" id="gestor-picker-results"></div>
     <div class="modal-actions">
-      <button type="button" class="button" id="gestor-picker-confirm"><span class="icon">✅</span><span>OK</span></button>
-      <button type="button" class="button ghost close-modal" data-target="gestor-picker-modal"><span class="icon">↩</span><span>Cancelar</span></button>
+      <button type="button" class="button" id="gestor-picker-confirm"><svg class="icon"><use href="#icon-check"></use></svg><span>OK</span></button>
+      <button type="button" class="button ghost close-modal" data-target="gestor-picker-modal"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Cancelar</span></button>
     </div>
   </div>
 </div>

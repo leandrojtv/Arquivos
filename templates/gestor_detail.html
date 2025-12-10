@@ -9,8 +9,8 @@
       <p class="subtitle">Informações de contato e vínculos com bases.</p>
     </div>
     <div class="header-actions">
-      <a class="button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">↩</span><span>Voltar</span></a>
-      <a class="button secondary" href="{{ url_for('edit_gestor', gestor_id=gestor.id) }}"><span class="icon">✏️</span><span>Editar</span></a>
+      <a class="button ghost" href="{{ url_for('list_gestors') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <a class="button secondary" href="{{ url_for('edit_gestor', gestor_id=gestor.id) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
     </div>
   </header>
 

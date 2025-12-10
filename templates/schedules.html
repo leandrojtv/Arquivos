@@ -9,7 +9,7 @@
       <p class="subtitle">Cadastre agendas reutilizáveis para execuções automáticas.</p>
     </div>
     <div class="actions-inline">
-      <button type="button" class="button primary open-schedule" data-mode="create"><span class="icon">➕</span><span>Novo schedule</span></button>
+      <button type="button" class="button primary open-schedule" data-mode="create"><svg class="icon"><use href="#icon-plus"></use></svg><span>Novo schedule</span></button>
     </div>
   </div>
 
@@ -50,10 +50,10 @@
                 data-days-raw="{{ sched.days_of_week or '' }}"
                 data-interval="{{ sched.interval or '' }}"
                 data-repeat="{{ 1 if sched.repeat_forever else 0 }}">
-                <span class="icon">✏️</span><span>Editar</span>
+                <svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span>
               </button>
               <form action="{{ url_for('delete_schedule', schedule_id=sched.id) }}" method="post" style="display:inline">
-                <button type="submit" class="button ghost"><span class="icon">🗑️</span><span>Excluir</span></button>
+                <button type="submit" class="button ghost"><svg class="icon"><use href="#icon-trash"></use></svg><span>Excluir</span></button>
               </form>
             </td>
           </tr>
@@ -74,7 +74,7 @@
         <h3 id="schedule-title">{{ 'Editar schedule' if edit_schedule else 'Novo schedule' }}</h3>
         <p class="subtitle">Defina quando e com que frequência os jobs devem rodar.</p>
       </div>
-      <button type="button" class="icon-button close-modal" data-target="schedule-modal" aria-label="Fechar"><span class="icon">✕</span></button>
+      <button type="button" class="icon-button close-modal" data-target="schedule-modal" aria-label="Fechar"><svg class="icon"><use href="#icon-close"></use></svg></button>
     </header>
     <form id="schedule-form" action="{{ url_for('schedules') }}" method="post" class="form-grid">
       <input type="hidden" name="schedule_id" id="schedule_id" value="{{ edit_schedule and edit_schedule['id'] or '' }}" />
@@ -122,8 +122,8 @@
       </div>
 
       <div class="modal-actions">
-        <button type="button" class="button ghost close-modal" data-target="schedule-modal"><span class="icon">↩</span><span>Cancelar</span></button>
-        <button type="submit" class="button"><span class="icon">💾</span><span id="schedule-submit-label">{{ 'Salvar alterações' if edit_schedule else 'Criar schedule' }}</span></button>
+        <button type="button" class="button ghost close-modal" data-target="schedule-modal"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Cancelar</span></button>
+        <button type="submit" class="button"><svg class="icon"><use href="#icon-save"></use></svg><span id="schedule-submit-label">{{ 'Salvar alterações' if edit_schedule else 'Criar schedule' }}</span></button>
       </div>
     </form>
   </div>

@@ -20,7 +20,7 @@
         <label for="password">Senha</label>
         <input type="password" id="password" name="password" required />
 
-        <button type="submit" class="button"><span class="icon">➕</span><span>Adicionar</span></button>
+        <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar</span></button>
       </form>
     </div>
 
@@ -42,13 +42,13 @@
               <td>
                 <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form">
                   <input type="password" name="password" placeholder="Nova senha" required />
-                  <button type="submit" class="button secondary compact"><span class="icon">🔄</span><span>Atualizar</span></button>
+                  <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
                 </form>
               </td>
               <td>
                 <div class="actions">
                   <form action="{{ url_for('delete_user', user_id=user['id']) }}" method="post">
-                    <button type="submit" class="button ghost danger compact" onclick="return confirm('Remover este usuário?')"><span class="icon">🗑️</span><span>Remover</span></button>
+                    <button type="submit" class="button ghost danger compact" onclick="return confirm('Remover este usuário?')"><svg class="icon"><use href="#icon-trash"></use></svg><span>Remover</span></button>
                   </form>
                 </div>
               </td>

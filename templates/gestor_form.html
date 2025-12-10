@@ -24,8 +24,8 @@
       <input type="email" name="email" value="{{ gestor['email'] if gestor else '' }}" required />
     </label>
     <div class="form-actions">
-      <a class="button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">↩</span><span>Cancelar</span></a>
-      <button type="submit" class="button"><span class="icon">💾</span><span>{{ 'Atualizar' if gestor else 'Cadastrar' }}</span></button>
+      <a class="button ghost" href="{{ url_for('list_gestors') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Cancelar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-save"></use></svg><span>{{ 'Atualizar' if gestor else 'Cadastrar' }}</span></button>
     </div>
   </form>
 </section>

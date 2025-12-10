@@ -11,14 +11,14 @@
     <div class="stat-actions">
       <div class="stat-chips">
         <div class="chip primary">
-          <span class="icon">📊</span>
+          <svg class="icon"><use href="#icon-chart"></use></svg>
           <div>
             <p class="eyebrow">Bases registradas</p>
             <strong>{{ total_bases }}</strong>
           </div>
         </div>
         <div class="chip primary">
-          <span class="icon">👥</span>
+          <svg class="icon"><use href="#icon-users"></use></svg>
           <div>
             <p class="eyebrow">Gestores cadastrados</p>
             <strong>{{ total_gestors }}</strong>
@@ -27,7 +27,7 @@
       </div>
       <div class="layout-toggle">
         <button id="toggleLayout" class="ghost" type="button" aria-pressed="false" aria-label="Alternar empilhamento de gráficos">
-          <span class="icon">📐</span> <span class="toggle-label">Empilhar gráficos</span>
+          <svg class="icon"><use href="#icon-grid"></use></svg> <span class="toggle-label">Empilhar gráficos</span>
         </button>
       </div>
     </div>
@@ -139,9 +139,9 @@
     if (toggle) {
       toggle.setAttribute("aria-pressed", stacked ? "true" : "false");
       const labelEl = toggle.querySelector(".toggle-label");
-      const iconEl = toggle.querySelector(".icon");
+      const iconUse = toggle.querySelector(".icon use");
       if (labelEl) labelEl.textContent = stacked ? "Modo lado a lado" : "Empilhar gráficos";
-      if (iconEl) iconEl.textContent = stacked ? "🧩" : "📐";
+      if (iconUse) iconUse.setAttribute("href", stacked ? "#icon-stack" : "#icon-grid");
     }
   };
 
@@ -153,9 +153,9 @@
       localStorage.setItem(layoutKey, stacked ? "stacked" : "grid");
       toggle.setAttribute("aria-pressed", stacked ? "true" : "false");
       const labelEl = toggle.querySelector(".toggle-label");
-      const iconEl = toggle.querySelector(".icon");
+      const iconUse = toggle.querySelector(".icon use");
       if (labelEl) labelEl.textContent = stacked ? "Modo lado a lado" : "Empilhar gráficos";
-      if (iconEl) iconEl.textContent = stacked ? "🧩" : "📐";
+      if (iconUse) iconUse.setAttribute("href", stacked ? "#icon-stack" : "#icon-grid");
     });
   };
 

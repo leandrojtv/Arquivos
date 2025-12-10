@@ -33,9 +33,9 @@
               <td>{% if base['sub1_id'] %}<a class="link" href="{{ url_for('gestor_detail', gestor_id=base['sub1_id']) }}">{{ base['sub1_name'] }}</a>{% else %}—{% endif %}</td>
               <td>{% if base['sub2_id'] %}<a class="link" href="{{ url_for('gestor_detail', gestor_id=base['sub2_id']) }}">{{ base['sub2_name'] }}</a>{% else %}—{% endif %}</td>
               <td class="center actions">
-                <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
+                <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
                 <form method="post" action="{{ url_for('delete_base', base_id=base['id']) }}" onsubmit="return confirm('Remover esta base?');">
-                  <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
+                  <button type="submit" class="button ghost danger compact"><svg class="icon"><use href="#icon-trash"></use></svg><span>Excluir</span></button>
                 </form>
               </td>
             </tr>

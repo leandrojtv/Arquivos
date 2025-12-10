@@ -26,9 +26,9 @@
     <p class="form-helper">Usado apenas em CSV. Para XLSX é ignorado.</p>
 
     <div class="actions-inline">
-      <a class="button ghost" href="{{ url_for('download_bases_template') }}"><span class="icon">📥</span><span>Baixar modelo XLSX</span></a>
-      <button type="submit" class="button"><span class="icon">⬆️</span><span>Continuar</span></button>
-      <a class="button ghost" href="{{ url_for('import_records') }}"><span class="icon">↩</span><span>Voltar</span></a>
+      <a class="button ghost" href="{{ url_for('download_bases_template') }}"><svg class="icon"><use href="#icon-download"></use></svg><span>Baixar modelo XLSX</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-upload"></use></svg><span>Continuar</span></button>
+      <a class="button ghost" href="{{ url_for('import_records') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
     </div>
   </form>
   {% elif step == 'mapear' %}
@@ -98,8 +98,8 @@
     </div>
 
     <div class="actions-inline">
-      <a class="button ghost" href="{{ url_for('import_bases_flow') }}"><span class="icon">↩</span><span>Voltar</span></a>
-      <button type="submit" class="button"><span class="icon">➡️</span><span>Avançar</span></button>
+      <a class="button ghost" href="{{ url_for('import_bases_flow') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Avançar</span></button>
     </div>
   </form>
   {% elif step == 'confirmar' %}
@@ -138,8 +138,8 @@
     </div>
     <p class="form-helper">Total de linhas encontradas: {{ total }}. Linhas sem gestor titular ou base serão ignoradas.</p>
     <form action="{{ url_for('import_bases_flow', step='executar') }}" method="post" class="actions-inline">
-      <a class="button ghost" href="{{ url_for('import_bases_flow', step='mapear') }}"><span class="icon">↩</span><span>Voltar</span></a>
-      <button type="submit" class="button"><span class="icon">🚀</span><span>Iniciar importação</span></button>
+      <a class="button ghost" href="{{ url_for('import_bases_flow', step='mapear') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-rocket"></use></svg><span>Iniciar importação</span></button>
     </form>
   </div>
   {% elif step == 'resultado' %}
@@ -170,8 +170,8 @@
     <div class="alert success">Importação finalizada sem erros.</div>
     {% endif %}
     <div class="actions-inline">
-      <a class="button ghost" href="{{ url_for('import_bases_flow') }}"><span class="icon">🔁</span><span>Importar novamente</span></a>
-      <a class="button" href="{{ url_for('list_bases') }}"><span class="icon">📄</span><span>Ver bases</span></a>
+      <a class="button ghost" href="{{ url_for('import_bases_flow') }}"><svg class="icon"><use href="#icon-repeat"></use></svg><span>Importar novamente</span></a>
+      <a class="button" href="{{ url_for('list_bases') }}"><svg class="icon"><use href="#icon-doc"></use></svg><span>Ver bases</span></a>
     </div>
   </div>
   {% endif %}

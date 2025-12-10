@@ -6,9 +6,9 @@
     <div class="search-banner card">
       <form action="{{ url_for('search') }}" method="get" class="search-hero-form" autocomplete="off">
         <div class="search-hero-input large">
-          <span class="icon">🔎</span>
+          <svg class="icon"><use href="#icon-search"></use></svg>
           <input type="text" id="landing-search" name="q" placeholder="Pesquise por base, gestor ou ambiente" />
-          <button type="submit" class="button secondary"><span class="icon">➡</span><span>Buscar</span></button>
+          <button type="submit" class="button secondary"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Buscar</span></button>
         </div>
         <div class="search-hero-suggestions" id="landing-suggestions" aria-live="polite"></div>
       </form>

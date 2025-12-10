@@ -56,8 +56,8 @@
     </div>
 
     <div class="actions-inline">
-      <button type="submit" class="button ghost" name="action" value="test"><span class="icon">🧪</span><span>Testar conexão</span></button>
-      <button type="submit" class="button"><span class="icon">➡️</span><span>Avançar</span></button>
+      <button type="submit" class="button ghost" name="action" value="test"><svg class="icon"><use href="#icon-lab"></use></svg><span>Testar conexão</span></button>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Avançar</span></button>
     </div>
   </form>
 
@@ -105,8 +105,8 @@
       </div>
     </div>
     <div class="actions-inline">
-      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><span class="icon">↩</span><span>Voltar</span></a>
-      <button type="submit" class="button"><span class="icon">➡️</span><span>Continuar</span></button>
+      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Continuar</span></button>
     </div>
   </form>
 
@@ -136,7 +136,7 @@
             <p>Reaproveite agendas criadas no gerenciador.</p>
           </div>
         </label>
-        <a class="button ghost" href="{{ url_for('schedules') }}"><span class="icon">🗓️</span><span>Gerenciar schedules</span></a>
+        <a class="button ghost" href="{{ url_for('schedules') }}"><svg class="icon"><use href="#icon-calendar"></use></svg><span>Gerenciar schedules</span></a>
       </div>
       <label for="schedule_id">Selecione um schedule</label>
       <select name="schedule_id" id="schedule_id">
@@ -152,8 +152,8 @@
       {% endif %}
     </div>
     <div class="actions-inline">
-      <a class="button ghost" href="{{ url_for('extract_teradata', step='tipos') }}"><span class="icon">↩</span><span>Voltar</span></a>
-      <button type="submit" class="button"><span class="icon">➡️</span><span>Avançar</span></button>
+      <a class="button ghost" href="{{ url_for('extract_teradata', step='tipos') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Avançar</span></button>
     </div>
   </form>
 
@@ -199,9 +199,9 @@
       </div>
     </div>
     <form action="{{ url_for('extract_teradata', step='executar') }}" method="post" class="actions-inline">
-      <button type="submit" name="action" value="save" class="button ghost"><span class="icon">💾</span><span>Salvar</span></button>
-      <button type="submit" name="action" value="execute" class="button"><span class="icon">🚀</span><span>Salvar e executar</span></button>
-      <a class="button ghost" href="{{ url_for('extraction_menu') }}"><span class="icon">🏁</span><span>Voltar</span></a>
+      <button type="submit" name="action" value="save" class="button ghost"><svg class="icon"><use href="#icon-save"></use></svg><span>Salvar</span></button>
+      <button type="submit" name="action" value="execute" class="button"><svg class="icon"><use href="#icon-rocket"></use></svg><span>Salvar e executar</span></button>
+      <a class="button ghost" href="{{ url_for('extraction_menu') }}"><svg class="icon"><use href="#icon-flag"></use></svg><span>Voltar</span></a>
     </form>
 
     {% if bucket.get('result') %}
@@ -227,8 +227,8 @@
     <div class="alert success">Extração concluída.</div>
     {% endif %}
     <div class="actions-inline">
-      <a class="button" href="{{ url_for('monitor_jobs') }}"><span class="icon">📊</span><span>Acompanhar jobs</span></a>
-      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><span class="icon">🔁</span><span>Novo fluxo</span></a>
+      <a class="button" href="{{ url_for('monitor_jobs') }}"><svg class="icon"><use href="#icon-chart"></use></svg><span>Acompanhar jobs</span></a>
+      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><svg class="icon"><use href="#icon-repeat"></use></svg><span>Novo fluxo</span></a>
     </div>
     {% endif %}
   </div>

@@ -64,7 +64,7 @@
         <div class="filters-footer">
           <input type="hidden" name="q" value="{{ query }}" />
           <button type="submit" class="button secondary full">
-            <span class="icon">🎯</span><span>Aplicar filtros</span>
+            <svg class="icon"><use href="#icon-filter"></use></svg><span>Aplicar filtros</span>
           </button>
         </div>
       </form>
@@ -82,7 +82,7 @@
         <div class="search-row">
           <input type="text" id="q" name="q" value="{{ query }}" placeholder="Ex.: produção, DataLab, Maria" />
           <button type="submit" class="button secondary">
-            <span class="icon">🔍</span>
+            <svg class="icon"><use href="#icon-search"></use></svg>
             <span>Pesquisar</span>
           </button>
         </div>
@@ -97,7 +97,7 @@
             <p class="subtitle">{% if not query and not filters.gestor and not filters.base and not filters.descricao and not filters.ambiente and not filters.fonte %}Digite um termo ou defina filtros para começar.{% elif results|length == 0 %}Tente ajustar a busca ou filtros para localizar cadastros correspondentes.{% else %}Use os filtros ao lado para refinar ainda mais.{% endif %}</p>
           </div>
           <div class="actions-inline">
-            <a class="button secondary compact" href="{{ url_for('export_bases_search', q=query, gestor=filters.gestor, base=filters.base, ambiente=filters.ambiente, fonte=filters.fonte, descricao=filters.descricao) }}"><span class="icon">📤</span><span>Exportar resultados</span></a>
+            <a class="button secondary compact" href="{{ url_for('export_bases_search', q=query, gestor=filters.gestor, base=filters.base, ambiente=filters.ambiente, fonte=filters.fonte, descricao=filters.descricao) }}"><svg class="icon"><use href="#icon-export"></use></svg><span>Exportar resultados</span></a>
             <a class="link" href="{{ url_for('new_base_form') }}">Adicionar base</a>
           </div>
         </div>
@@ -124,9 +124,9 @@
                     {% endif %}
                   </td>
                   <td class="actions">
-                    <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><span class="icon">✏️</span><span>Editar</span></a>
+                    <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
                     <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
-                      <button type="submit" class="button ghost danger compact"><span class="icon">🗑️</span><span>Excluir</span></button>
+                      <button type="submit" class="button ghost danger compact"><svg class="icon"><use href="#icon-trash"></use></svg><span>Excluir</span></button>
                     </form>
                   </td>
                 </tr>
