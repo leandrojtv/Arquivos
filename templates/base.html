@@ -135,6 +135,7 @@
         const menuToggle = document.querySelector('.menu-toggle');
         if (sidebar && menuToggle && !sidebar.contains(event.target) && !menuToggle.contains(event.target)) {
           sidebar.classList.remove('open');
+          shell?.classList.remove('sidebar-open');
           menuToggle.setAttribute('aria-expanded', 'false');
         }
       });
@@ -145,19 +146,25 @@
           const toggle = document.querySelector('.menu-toggle');
           if (sidebar && toggle) {
             sidebar.classList.remove('open');
+            shell?.classList.remove('sidebar-open');
             toggle.setAttribute('aria-expanded', 'false');
           }
         }
       });
       const menuToggle = document.querySelector('.menu-toggle');
       const sidebar = document.getElementById('sidebar');
+      const shell = document.querySelector('.dashboard-shell');
       if (menuToggle && sidebar) {
         if (window.innerWidth > 1024) {
           sidebar.classList.add('open');
+          shell?.classList.add('sidebar-open');
           menuToggle.setAttribute('aria-expanded', 'true');
         }
         menuToggle.addEventListener('click', () => {
           const isOpen = sidebar.classList.toggle('open');
+          if (shell) {
+            shell.classList.toggle('sidebar-open', isOpen);
+          }
           menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         });
       }
@@ -165,6 +172,7 @@
         btn.addEventListener('click', () => {
           const target = document.getElementById(btn.dataset.target);
           if (target) target.classList.remove('open');
+          shell?.classList.remove('sidebar-open');
         });
       });
     </script>
