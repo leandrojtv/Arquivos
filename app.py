@@ -49,6 +49,27 @@ DEFAULT_EXTRACTOR_GESTOR = {
 }
 
 
+def normalize_wildcard(term: str):
+    """Transforma um termo de busca em padrão SQL LIKE com suporte a * e ?."""
+    if term is None:
+        return None
+    has_wildcard = any(ch in term for ch in "*?")
+    pattern = []
+    for ch in term:
+        if ch == "*":
+            pattern.append("%")
+        elif ch == "?":
+            pattern.append("_")
+        elif ch in ("%", "_"):
+            pattern.append(f"\\{ch}")
+        else:
+            pattern.append(ch)
+    joined = "".join(pattern)
+    if not has_wildcard:
+        joined = f"%{joined}%"
+    return joined
+
+
 def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -749,11 +770,11 @@ def reports():
 
 def get_gestors(term=None):
     if term:
-        like_term = f"%{term}%"
+        like_term = normalize_wildcard(term)
         return query_db(
             """
             SELECT * FROM gestors
-            WHERE name LIKE ? OR secretaria LIKE ? OR coordenacao LIKE ? OR email LIKE ?
+            WHERE name LIKE ? ESCAPE '\\' OR secretaria LIKE ? ESCAPE '\\' OR coordenacao LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'
             ORDER BY name COLLATE NOCASE ASC
             """,
             (like_term, like_term, like_term, like_term),
@@ -1091,20 +1112,20 @@ def get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao):
     params = []
 
     if term:
-        like_term = f"%{term}%"
+        like_term = normalize_wildcard(term)
         conditions.append(
-            "(b.name LIKE ? OR COALESCE(b.descricao, '') LIKE ? OR COALESCE(b.ambiente, '') LIKE ? OR COALESCE(g.name, '') LIKE ?)"
+            "(b.name LIKE ? ESCAPE '\\' OR COALESCE(b.descricao, '') LIKE ? ESCAPE '\\' OR COALESCE(b.ambiente, '') LIKE ? ESCAPE '\\' OR COALESCE(g.name, '') LIKE ? ESCAPE '\\')"
         )
         params.extend([like_term, like_term, like_term, like_term])
     if gestor:
-        conditions.append("g.name LIKE ?")
-        params.append(f"%{gestor}%")
+        conditions.append("g.name LIKE ? ESCAPE '\\'")
+        params.append(normalize_wildcard(gestor))
     if base_nome:
-        conditions.append("b.name LIKE ?")
-        params.append(f"%{base_nome}%")
+        conditions.append("b.name LIKE ? ESCAPE '\\'")
+        params.append(normalize_wildcard(base_nome))
     if descricao:
-        conditions.append("COALESCE(b.descricao, '') LIKE ?")
-        params.append(f"%{descricao}%")
+        conditions.append("COALESCE(b.descricao, '') LIKE ? ESCAPE '\\'")
+        params.append(normalize_wildcard(descricao))
     if ambiente:
         conditions.append("b.ambiente = ?")
         params.append(ambiente)
