@@ -305,6 +305,18 @@ def bulk_insert_bases(records):
     conn.close()
 
 
+def bulk_update_base_links(records):
+    if not records:
+        return
+    conn = sqlite3.connect(DB_PATH)
+    conn.executemany(
+        "UPDATE bases SET gestor_id = ?, substituto1_id = ?, substituto2_id = ? WHERE id = ?",
+        records,
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_import_bucket():
     token = session.get("import_token")
     if not token:
@@ -745,6 +757,15 @@ def gestor_id_by_name(name):
     if not name:
         return None
     result = query_db("SELECT id FROM gestors WHERE name = ? COLLATE NOCASE", (name.strip(),))
+    if result:
+        return result[0]["id"]
+    return None
+
+
+def base_id_by_name(name):
+    if not name:
+        return None
+    result = query_db("SELECT id FROM bases WHERE name = ? COLLATE NOCASE", (name.strip(),))
     if result:
         return result[0]["id"]
     return None
@@ -1475,6 +1496,173 @@ def import_bases_flow():
 
     clear_import_state(flow)
     return render_template("import_bases.html", step="upload")
+
+
+@app.route("/importar/relacionamentos", methods=["GET", "POST"])
+@login_required
+def import_relationships_flow():
+    step = request.args.get("step", "upload")
+    flow = "relacionamentos"
+    bucket = get_flow_bucket(flow)
+
+    if request.method == "POST" and step == "upload":
+        upload = request.files.get("file")
+        delimiter = request.form.get("delimiter", ";").strip() or ";"
+
+        if not upload or not upload.filename:
+            flash("Selecione um arquivo CSV ou XLSX para continuar.", "error")
+            return redirect(url_for("import_relationships_flow"))
+
+        try:
+            headers, rows = parse_tabular(upload, delimiter)
+        except Exception:
+            flash("Não foi possível ler o arquivo. Confirme o formato e o delimitador.", "error")
+            return redirect(url_for("import_relationships_flow"))
+
+        if not rows:
+            flash("Nenhuma linha encontrada para importar.", "error")
+            return redirect(url_for("import_relationships_flow"))
+
+        bucket["headers"] = headers
+        bucket["rows"] = rows
+        bucket.pop("mapping", None)
+        bucket.pop("result", None)
+        return redirect(url_for("import_relationships_flow", step="mapear"))
+
+    if request.method == "POST" and step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_relationships_flow"))
+
+        mapping = {
+            "base": request.form.get("map_base"),
+            "gestor": request.form.get("map_gestor"),
+            "sub1": request.form.get("map_sub1"),
+            "sub2": request.form.get("map_sub2"),
+        }
+
+        if not mapping["base"] or not mapping["gestor"]:
+            flash("Mapeie pelo menos base e gestor para seguir.", "error")
+            return redirect(url_for("import_relationships_flow", step="mapear"))
+
+        bucket["mapping"] = mapping
+        return redirect(url_for("import_relationships_flow", step="confirmar"))
+
+    if request.method == "POST" and step == "executar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_relationships_flow"))
+
+        total = len(rows)
+        imported = 0
+        errors = []
+        prepared = []
+        header_set = set(headers)
+
+        for row in rows:
+            missing_cols = [col for col in mapping.values() if col and col not in header_set]
+            if missing_cols:
+                errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
+                break
+
+            base_name = row.get(mapping["base"], "").strip()
+            gestor_name = row.get(mapping["gestor"], "").strip()
+            sub1_name = row.get(mapping["sub1"], "").strip() if mapping.get("sub1") else ""
+            sub2_name = row.get(mapping["sub2"], "").strip() if mapping.get("sub2") else ""
+
+            if not base_name or not gestor_name:
+                errors.append("Linha ignorada por falta de base ou gestor titular.")
+                continue
+
+            base_id = base_id_by_name(base_name)
+            if not base_id:
+                errors.append(f"Base '{base_name}' não encontrada.")
+                continue
+
+            gestor_id = gestor_id_by_name(gestor_name)
+            if not gestor_id:
+                errors.append(f"Gestor '{gestor_name}' não encontrado.")
+                continue
+
+            sub1_id = None
+            sub2_id = None
+
+            if sub1_name:
+                sub1_id = gestor_id_by_name(sub1_name)
+                if not sub1_id:
+                    errors.append(f"1º substituto '{sub1_name}' não encontrado.")
+                    continue
+
+            if sub2_name:
+                sub2_id = gestor_id_by_name(sub2_name)
+                if not sub2_id:
+                    errors.append(f"2º substituto '{sub2_name}' não encontrado.")
+                    continue
+
+            if sub1_id and sub2_id and sub1_id == sub2_id:
+                errors.append("Substitutos precisam ser pessoas diferentes.")
+                continue
+            if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+                errors.append("Gestor titular não pode repetir um substituto.")
+                continue
+
+            prepared.append((gestor_id, sub1_id, sub2_id, base_id))
+
+        if prepared:
+            bulk_update_base_links(prepared)
+            imported = len(prepared)
+
+        bucket["result"] = {
+            "total": total,
+            "imported": imported,
+            "errors": errors,
+            "progress": 100 if total else 0,
+        }
+        bucket["rows"] = prepared
+        return redirect(url_for("import_relationships_flow", step="resultado"))
+
+    if step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_relationships_flow"))
+        return render_template(
+            "import_relationships.html", step="mapear", headers=headers, preview=rows[:5]
+        )
+
+    if step == "confirmar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_relationships_flow"))
+
+        preview = []
+        for row in rows[:5]:
+            preview.append(
+                {
+                    "base": row.get(mapping.get("base"), ""),
+                    "gestor": row.get(mapping.get("gestor"), ""),
+                    "sub1": row.get(mapping.get("sub1"), "") if mapping.get("sub1") else "",
+                    "sub2": row.get(mapping.get("sub2"), "") if mapping.get("sub2") else "",
+                }
+            )
+
+        return render_template(
+            "import_relationships.html",
+            step="confirmar",
+            mapping=mapping,
+            preview=preview,
+            total=len(rows),
+        )
+
+    if step == "resultado":
+        result = bucket.get("result")
+        if not result:
+            return redirect(url_for("import_relationships_flow"))
+        return render_template("import_relationships.html", step="resultado", result=result)
+
+    clear_import_state(flow)
+    return render_template("import_relationships.html", step="upload")
 
 
 @app.route("/extracao")

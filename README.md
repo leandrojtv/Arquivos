@@ -114,6 +114,15 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Gestor`) e, se desejar, informe também `Ambiente`, `Descrição` e as colunas de **1º** e **2º substitutos**.
 4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos (quando informados), mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.
 
+## Vincular bases a gestores via arquivo
+
+Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extração) e você só precisar atualizar o titular e os substitutos:
+
+1. Acesse o menu **Importar** e escolha **Vincular bases e gestores**.
+2. Envie um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
+3. Mapeie as colunas obrigatórias **Base** (nome da base) e **Gestor** (nome do titular). As colunas de **1º substituto** e **2º substituto** são opcionais.
+4. Revise o resumo e inicie a atualização. O sistema localiza bases e gestores pelo nome, aplica as alterações e exibe progresso, totais processados e avisos se algum nome não for encontrado.
+
 ## Extração de metadados (Teradata)
 
 1. Abra o menu **Extração** e escolha o conector **Teradata**.
