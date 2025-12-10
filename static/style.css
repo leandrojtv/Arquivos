@@ -762,6 +762,100 @@ table td.compact {
   margin-bottom: 0;
 }
 
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.stat-chips {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: 14px;
+  padding: 0.65rem 0.9rem;
+  border: 1.5px solid rgba(15, 111, 237, 0.15);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 12px 24px rgba(12, 89, 190, 0.08);
+}
+
+.chip.primary {
+  background: linear-gradient(135deg, rgba(15, 111, 237, 0.14), rgba(12, 89, 190, 0.18));
+  color: #0a3a66;
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card-header h3 {
+  margin: 0.15rem 0 0 0;
+}
+
+.tag {
+  background: rgba(12, 89, 190, 0.1);
+  color: #0b5394;
+  border-radius: 12px;
+  padding: 0.35rem 0.75rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.chart-wrapper {
+  position: relative;
+  min-height: 260px;
+}
+
+.chart-legend {
+  list-style: none;
+  display: flex;
+  gap: 1rem;
+  padding: 0;
+  margin: 0.75rem 0 0 0;
+  color: #52606d;
+  flex-wrap: wrap;
+}
+
+.chart-legend .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  margin-right: 0.35rem;
+  border: 2px solid rgba(0, 0, 0, 0.05);
+}
+
+.dot-primary {
+  background: #0f6fed;
+}
+
+.dot-muted {
+  background: #9fb3c8;
+}
+
 @media (max-width: 900px) {
   .header-main {
     align-items: flex-start;

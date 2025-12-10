@@ -661,6 +661,49 @@ def landing():
     return render_template("landing.html", total_bases=total_bases, total_gestors=total_gestors)
 
 
+@app.route("/relatorios")
+@login_required
+def reports():
+    coverage = query_db(
+        """
+        SELECT
+            SUM(CASE WHEN gestor_id IS NULL THEN 1 ELSE 0 END) AS sem_gestor,
+            SUM(CASE WHEN gestor_id IS NOT NULL THEN 1 ELSE 0 END) AS com_gestor
+        FROM bases
+        """
+    )[0]
+    coord_rows = query_db(
+        """
+        SELECT COALESCE(g.coordenacao, 'Sem coordenação') as label, COUNT(*) as total
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        GROUP BY label
+        ORDER BY total DESC, label ASC
+        """
+    )
+    env_rows = query_db(
+        """
+        SELECT COALESCE(NULLIF(TRIM(ambiente), ''), 'Sem ambiente') as label, COUNT(*) as total
+        FROM bases
+        GROUP BY label
+        ORDER BY total DESC, label ASC
+        """
+    )
+
+    data = {
+        "total_gestors": query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"],
+        "total_bases": (coverage["sem_gestor"] or 0) + (coverage["com_gestor"] or 0),
+        "coverage_labels": ["Com gestor", "Sem gestor"],
+        "coverage_values": [coverage["com_gestor"] or 0, coverage["sem_gestor"] or 0],
+        "coord_labels": [row["label"] or "Sem coordenação" for row in coord_rows],
+        "coord_values": [row["total"] for row in coord_rows],
+        "env_labels": [row["label"] or "Sem ambiente" for row in env_rows],
+        "env_values": [row["total"] for row in env_rows],
+    }
+
+    return render_template("reports.html", **data)
+
+
 def get_gestors(term=None):
     if term:
         like_term = f"%{term}%"

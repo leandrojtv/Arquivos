@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Relatórios | Gestão de Bases{% endblock %}
+{% block content %}
+<section class="section-header">
+  <p class="eyebrow">Relatórios</p>
+  <div class="section-heading">
+    <div>
+      <h2>Visão consolidada das bases</h2>
+      <p class="muted">Acompanhe cobertura de gestores, distribuição por coordenação e ambientes em tempo real.</p>
+    </div>
+    <div class="stat-chips">
+      <div class="chip primary">
+        <span class="icon">📊</span>
+        <div>
+          <p class="eyebrow">Bases registradas</p>
+          <strong>{{ total_bases }}</strong>
+        </div>
+      </div>
+      <div class="chip primary">
+        <span class="icon">👥</span>
+        <div>
+          <p class="eyebrow">Gestores cadastrados</p>
+          <strong>{{ total_gestors }}</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="reports-grid">
+  <div class="card chart-card">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Cobertura</p>
+        <h3>Bases com e sem gestor</h3>
+      </div>
+      <div class="tag">Pizza</div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="coverageChart" aria-label="Gráfico de bases com e sem gestor"></canvas>
+      <ul class="chart-legend">
+        <li><span class="dot dot-primary"></span>Com gestor</li>
+        <li><span class="dot dot-muted"></span>Sem gestor</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Panorama</p>
+        <h3>Bases por coordenação</h3>
+      </div>
+      <div class="tag">Barras</div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="coordChart" aria-label="Gráfico de bases por coordenação"></canvas>
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Ambientes</p>
+        <h3>Bases por ambiente</h3>
+      </div>
+      <div class="tag">Barras</div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="envChart" aria-label="Gráfico de bases por ambiente"></canvas>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const coverageLabels = {{ coverage_labels|tojson }};
+  const coverageValues = {{ coverage_values|tojson }};
+  const coordLabels = {{ coord_labels|tojson }};
+  const coordValues = {{ coord_values|tojson }};
+  const envLabels = {{ env_labels|tojson }};
+  const envValues = {{ env_values|tojson }};
+
+  const palette = ["#0f6fed", "#7cc4ff", "#36a3f7", "#9dd5ff", "#1d9bf0", "#74a9f2", "#b7d8ff", "#5090ea"];
+  const muted = "#cbd5e1";
+
+  const renderChart = (ctxId, config) => {
+    const ctx = document.getElementById(ctxId);
+    if (!ctx) return;
+    return new Chart(ctx, config);
+  };
+
+  renderChart("coverageChart", {
+    type: "doughnut",
+    data: {
+      labels: coverageLabels,
+      datasets: [
+        {
+          data: coverageValues,
+          backgroundColor: [palette[0], palette[1] || muted],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+      },
+      cutout: "60%",
+    },
+  });
+
+  renderChart("coordChart", {
+    type: "bar",
+    data: {
+      labels: coordLabels,
+      datasets: [
+        {
+          label: "Bases",
+          data: coordValues,
+          backgroundColor: coordLabels.map((_, idx) => palette[idx % palette.length]),
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, precision: 0 },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+
+  renderChart("envChart", {
+    type: "bar",
+    data: {
+      labels: envLabels,
+      datasets: [
+        {
+          label: "Bases",
+          data: envValues,
+          backgroundColor: envLabels.map((_, idx) => palette[(idx + 2) % palette.length]),
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, precision: 0 },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+</script>
+{% endblock %}

@@ -86,6 +86,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
 - Importação em massa de bases com mapeamento de colunas, gestor titular obrigatório e substitutos opcionais vinculados pelo nome.
 - Extração guiada de metadados do Teradata com montagem automática da string JDBC, teste de conexão e aplicação direta nas bases.
+- Relatórios com gráfico de cobertura de gestores, total de gestores cadastrados e distribuição de bases por coordenação e ambiente.
 - Mensagens de feedback em todas as operações.
 - Menu do usuário no topo para acessar **Configurações**, logout e abrir a modal **Novo** para escolher entre cadastrar gestor ou base.
 - Página de gestão de usuários para criar, redefinir senha ou remover acessos (exceto o administrador padrão).
@@ -128,3 +129,11 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 - No menu suspenso do usuário, acesse **Jobs de extração** para ver histórico, progresso e status de cada execução.
 - Use **Restart** para reprocessar um job com a mesma configuração ou **Editar** para reabrir o fluxo de extração com os dados preenchidos e ajustar antes de reiniciar.
 - Clique em **Logs** para baixar o log de execução e investigar eventuais falhas.
+
+## Relatórios
+
+- Acesse o menu **Relatórios** para ver um painel com:
+  - Quantidade total de bases e gestores cadastrados.
+  - Gráfico de pizza com bases que possuem gestor vinculado e bases sem gestor.
+  - Gráfico de barras com a distribuição de bases por coordenação (do gestor titular).
+  - Gráfico de barras com a distribuição de bases por ambiente (produção, homologação, desenvolvimento, DataLab ou vazio).
