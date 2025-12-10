@@ -2,27 +2,49 @@
 {% block title %}Início{% endblock %}
 {% block content %}
 <section class="hero">
-  <div class="hero-main">
-    <div class="search-hero card">
-      <p class="eyebrow">Pesquisa rápida</p>
+  <div class="landing-grid">
+    <div class="search-banner card">
       <form action="{{ url_for('search') }}" method="get" class="search-hero-form" autocomplete="off">
-        <div class="search-hero-input">
+        <div class="search-hero-input large">
           <span class="icon">🔎</span>
           <input type="text" id="landing-search" name="q" placeholder="Pesquise por base, gestor ou ambiente" />
           <button type="submit" class="button secondary"><span class="icon">➡</span><span>Buscar</span></button>
         </div>
         <div class="search-hero-suggestions" id="landing-suggestions" aria-live="polite"></div>
       </form>
-      <div class="quick-actions">
-        <a class="button" href="{{ url_for('new_gestor_form') }}"><span class="icon">👤</span><span>Cadastrar gestor</span></a>
-        <a class="button ghost" href="{{ url_for('new_base_form') }}"><span class="icon">🗂️</span><span>Cadastrar base</span></a>
+    </div>
+
+    <div class="summary-row">
+      <div class="card progress-card">
+        <div class="card-head">
+          <p class="eyebrow">Progresso</p>
+          <span class="pill">{{ coverage_percent }}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: {{ coverage_percent }}%"></div>
+        </div>
+        <div class="progress-meta">
+          <div>
+            <p class="muted">Com gestor</p>
+            <p class="strong">{{ with_gestor }}</p>
+          </div>
+          <div>
+            <p class="muted">Sem gestor</p>
+            <p class="strong">{{ without_gestor }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="hero-card card">
+        <p class="stat-label">Resumo</p>
+        <p class="stat-value">{{ total_bases }} bases</p>
+        <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
+        <a class="button tertiary" href="{{ url_for('search') }}"><span class="icon">📑</span><span>Ver todos</span></a>
       </div>
     </div>
-    <div class="hero-card">
-      <p class="stat-label">Resumo</p>
-      <p class="stat-value">{{ total_bases }} bases</p>
-      <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
-      <a class="button tertiary" href="{{ url_for('search') }}"><span class="icon">📑</span><span>Ver todos</span></a>
+
+    <div class="action-grid">
+      <a class="button primary" href="{{ url_for('new_gestor_form') }}"><span class="icon">👤</span><span>Cadastrar gestor</span></a>
+      <a class="button ghost" href="{{ url_for('new_base_form') }}"><span class="icon">🗂️</span><span>Cadastrar base</span></a>
     </div>
   </div>
 </section>

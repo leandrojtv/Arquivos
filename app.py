@@ -659,7 +659,18 @@ def parse_tabular(file_storage, delimiter):
 def landing():
     total_bases = query_db("SELECT COUNT(*) as total FROM bases")[0]["total"]
     total_gestors = query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"]
-    return render_template("landing.html", total_bases=total_bases, total_gestors=total_gestors)
+    with_gestor = query_db("SELECT COUNT(*) as total FROM bases WHERE gestor_id IS NOT NULL")[0]["total"]
+    without_gestor = max(total_bases - with_gestor, 0)
+    coverage_percent = round((with_gestor / total_bases) * 100, 1) if total_bases else 0
+
+    return render_template(
+        "landing.html",
+        total_bases=total_bases,
+        total_gestors=total_gestors,
+        with_gestor=with_gestor,
+        without_gestor=without_gestor,
+        coverage_percent=coverage_percent,
+    )
 
 
 @app.route("/relatorios")
