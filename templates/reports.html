@@ -27,14 +27,19 @@
   </div>
 </section>
 
-<section class="reports-grid">
-  <div class="card chart-card">
+<section class="reports-grid" id="reportsGrid" aria-label="Área para reordenar gráficos">
+  <div class="card chart-card draggable-card" data-card-id="coverage" draggable="true" aria-grabbed="false">
     <div class="card-header">
       <div>
         <p class="eyebrow">Cobertura</p>
         <h3>Bases com e sem gestor</h3>
       </div>
-      <div class="tag">Pizza</div>
+      <div class="card-actions">
+        <div class="tag">Pizza</div>
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
     </div>
     <div class="chart-wrapper">
       <canvas id="coverageChart" aria-label="Gráfico de bases com e sem gestor"></canvas>
@@ -45,26 +50,36 @@
     </div>
   </div>
 
-  <div class="card chart-card">
+  <div class="card chart-card draggable-card" data-card-id="coord" draggable="true" aria-grabbed="false">
     <div class="card-header">
       <div>
         <p class="eyebrow">Panorama</p>
         <h3>Bases por coordenação</h3>
       </div>
-      <div class="tag">Barras</div>
+      <div class="card-actions">
+        <div class="tag">Barras</div>
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
     </div>
     <div class="chart-wrapper">
       <canvas id="coordChart" aria-label="Gráfico de bases por coordenação"></canvas>
     </div>
   </div>
 
-  <div class="card chart-card">
+  <div class="card chart-card draggable-card" data-card-id="env" draggable="true" aria-grabbed="false">
     <div class="card-header">
       <div>
         <p class="eyebrow">Ambientes</p>
         <h3>Bases por ambiente</h3>
       </div>
-      <div class="tag">Barras</div>
+      <div class="card-actions">
+        <div class="tag">Barras</div>
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
     </div>
     <div class="chart-wrapper">
       <canvas id="envChart" aria-label="Gráfico de bases por ambiente"></canvas>
@@ -88,6 +103,86 @@
     const ctx = document.getElementById(ctxId);
     if (!ctx) return;
     return new Chart(ctx, config);
+  };
+
+  const grid = document.getElementById("reportsGrid");
+  const orderKey = "reports-card-order";
+
+  const saveOrder = () => {
+    if (!grid) return;
+    const order = Array.from(grid.querySelectorAll(".draggable-card")).map((card) => card.dataset.cardId);
+    localStorage.setItem(orderKey, JSON.stringify(order));
+  };
+
+  const applySavedOrder = () => {
+    if (!grid) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(orderKey) || "[]");
+      saved.forEach((id) => {
+        const card = grid.querySelector(`[data-card-id="${id}"]`);
+        if (card) {
+          grid.appendChild(card);
+        }
+      });
+    } catch (err) {
+      console.warn("Não foi possível aplicar a ordem salva", err);
+    }
+  };
+
+  const setupDragAndDrop = () => {
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll(".draggable-card"));
+
+    cards.forEach((card) => {
+      card.addEventListener("dragstart", (e) => {
+        card.classList.add("dragging");
+        card.setAttribute("aria-grabbed", "true");
+        e.dataTransfer.setData("text/plain", card.dataset.cardId);
+        e.dataTransfer.effectAllowed = "move";
+      });
+
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        card.setAttribute("aria-grabbed", "false");
+        grid.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+        saveOrder();
+      });
+
+      card.addEventListener("dragover", (e) => {
+        e.preventDefault();
+      });
+
+      card.addEventListener("dragenter", (e) => {
+        e.preventDefault();
+        if (!card.classList.contains("dragging")) {
+          card.classList.add("drag-over");
+        }
+      });
+
+      card.addEventListener("dragleave", () => {
+        card.classList.remove("drag-over");
+      });
+
+      card.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const sourceId = e.dataTransfer.getData("text/plain");
+        const sourceCard = grid.querySelector(`[data-card-id="${sourceId}"]`);
+        card.classList.remove("drag-over");
+        if (!sourceCard || sourceCard === card) return;
+
+        const children = Array.from(grid.children);
+        const targetIndex = children.indexOf(card);
+        const sourceIndex = children.indexOf(sourceCard);
+
+        if (sourceIndex < targetIndex) {
+          grid.insertBefore(sourceCard, card.nextSibling);
+        } else {
+          grid.insertBefore(sourceCard, card);
+        }
+
+        saveOrder();
+      });
+    });
   };
 
   renderChart("coverageChart", {
@@ -154,5 +249,8 @@
       plugins: { legend: { display: false } },
     },
   });
+
+  applySavedOrder();
+  setupDragAndDrop();
 </script>
 {% endblock %}
