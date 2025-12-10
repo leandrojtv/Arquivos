@@ -31,7 +31,7 @@
         {% if gestors %}
           {% for gestor in gestors %}
           <tr>
-            <td>{{ gestor['name'] }}</td>
+            <td><a class="link" href="{{ url_for('gestor_detail', gestor_id=gestor['id']) }}">{{ gestor['name'] }}</a></td>
             <td>{{ gestor['secretaria'] }}</td>
             <td>{{ gestor['coordenacao'] }}</td>
             <td>{{ gestor['email'] }}</td>

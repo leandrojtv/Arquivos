@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Gestor: {{ gestor.name }}{% endblock %}
+{% block content %}
+<section class="card detail-card">
+  <header class="card-header">
+    <div>
+      <p class="eyebrow">Perfil do gestor</p>
+      <h2>{{ gestor.name }}</h2>
+      <p class="subtitle">Informações de contato e vínculos com bases.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">↩</span><span>Voltar</span></a>
+      <a class="button secondary" href="{{ url_for('edit_gestor', gestor_id=gestor.id) }}"><span class="icon">✏️</span><span>Editar</span></a>
+    </div>
+  </header>
+
+  <div class="detail-grid">
+    <div class="detail-tile">
+      <p class="eyebrow">Secretaria</p>
+      <p class="value">{{ gestor.secretaria }}</p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">Coordenação</p>
+      <p class="value">{{ gestor.coordenacao }}</p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">E-mail</p>
+      <p class="value">{{ gestor.email }}</p>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <div class="table-header">
+      <div>
+        <p class="eyebrow">Bases relacionadas</p>
+        <h3>{{ bases|length }} base(s) encontradas</h3>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Base</th>
+          <th>Ambiente</th>
+          <th>Papel</th>
+          <th>Fonte</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if bases %}
+          {% for base in bases %}
+          <tr>
+            <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base['name'] }}</a></td>
+            <td>{{ base['ambiente'] or '—' }}</td>
+            <td>{{ base['papel'] }}</td>
+            <td>{{ base['source_connector']|capitalize }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="4" class="center">Nenhuma base vinculada a este gestor.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

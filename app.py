@@ -758,6 +758,35 @@ def list_gestors():
     return render_template("gestors.html", gestors=gestors, query=search_term)
 
 
+@app.route("/gestores/<int:gestor_id>")
+@login_required
+def gestor_detail(gestor_id):
+    gestor_rows = query_db("SELECT * FROM gestors WHERE id = ?", (gestor_id,))
+    if not gestor_rows:
+        flash("Gestor não encontrado.", "error")
+        return redirect(url_for("list_gestors"))
+
+    bases = query_db(
+        """
+        SELECT b.*, CASE
+            WHEN b.gestor_id = ? THEN 'Titular'
+            WHEN b.substituto1_id = ? THEN '1º substituto'
+            WHEN b.substituto2_id = ? THEN '2º substituto'
+        END as papel
+        FROM bases b
+        WHERE b.gestor_id = ? OR b.substituto1_id = ? OR b.substituto2_id = ?
+        ORDER BY b.name COLLATE NOCASE ASC
+        """,
+        (gestor_id, gestor_id, gestor_id, gestor_id, gestor_id, gestor_id),
+    )
+
+    return render_template(
+        "gestor_detail.html",
+        gestor=gestor_rows[0],
+        bases=bases,
+    )
+
+
 @app.route("/gestores/novo")
 @login_required
 def new_gestor_form():
@@ -874,6 +903,27 @@ def list_bases():
         """
     )
     return render_template("bases.html", bases=records)
+
+
+@app.route("/bases/<int:base_id>")
+@login_required
+def base_detail(base_id):
+    rows = query_db(
+        """
+        SELECT b.*, g.name as gestor_name, gs1.name as sub1_name, gs2.name as sub2_name
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        LEFT JOIN gestors gs1 ON gs1.id = b.substituto1_id
+        LEFT JOIN gestors gs2 ON gs2.id = b.substituto2_id
+        WHERE b.id = ?
+        """,
+        (base_id,),
+    )
+    if not rows:
+        flash("Base não encontrada.", "error")
+        return redirect(url_for("list_bases"))
+
+    return render_template("base_detail.html", base=rows[0])
 
 
 @app.route("/bases/nova")
