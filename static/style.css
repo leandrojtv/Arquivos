@@ -736,8 +736,41 @@ table td.compact {
   gap: 0.4rem;
 }
 
+.summary-list.compact {
+  gap: 0.2rem;
+}
+
 .summary-list li strong {
   color: #fff;
+}
+
+.info-grid {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.code-block {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  background: linear-gradient(120deg, #4f46e5, #22c55e);
+  color: #fff;
+  border-radius: 999px;
+  width: fit-content;
+  font-weight: 700;
+  font-size: 0.8rem;
 }
 
 .stat strong {

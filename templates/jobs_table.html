@@ -1,0 +1,51 @@
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Conector</th>
+      <th>Tipo</th>
+      <th>Modo</th>
+      <th>Agenda</th>
+      <th>Próxima execução</th>
+      <th>Status</th>
+      <th>Progresso</th>
+      <th>Atualizado</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for job in jobs %}
+    <tr>
+      <td>#{{ job.id }}</td>
+      <td>{{ job.connector }}</td>
+      <td>{{ job.extraction_type }}</td>
+      <td>{{ job.mode }}</td>
+      <td>
+        {% if job.run_once %}
+        Execução única
+        {% elif schedules.get(job.schedule_id) %}
+        {{ schedules.get(job.schedule_id).name }} · {{ humanize_days(schedules.get(job.schedule_id).days_of_week) }}
+        {% else %}
+        —
+        {% endif %}
+      </td>
+      <td>{{ job.next_run_at or '—' }}</td>
+      <td>{{ job.status }}</td>
+      <td>
+        <div class="progress mini"><div class="progress-bar" style="width: {{ job.progress }}%"></div></div>
+        <small>{{ job.progress }}%</small>
+      </td>
+      <td>{{ job.updated_at }}</td>
+      <td class="actions-inline">
+        <form action="{{ url_for('restart_job', job_id=job.id) }}" method="post" style="display:inline">
+          <button type="submit" class="button ghost"><span class="icon">🔁</span><span>Restart</span></button>
+        </form>
+        <a class="button" href="{{ url_for('edit_job', job_id=job.id) }}"><span class="icon">✏️</span><span>Editar</span></a>
+        <a class="button ghost" href="{{ url_for('download_logs', job_id=job.id) }}"><span class="icon">📥</span><span>Logs</span></a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10">Nenhum job executado ainda.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

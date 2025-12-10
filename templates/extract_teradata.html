@@ -168,16 +168,23 @@
     <div class="grid-two">
       <div>
         <p class="eyebrow">Resumo</p>
-        <ul class="summary-list">
-          <li><strong>JDBC:</strong> {{ bucket.get('config', {}).get('jdbc_url') or 'Gerado automaticamente' }}</li>
-          <li><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</li>
-          <li><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</li>
-          {% if selected_schedule %}
-          <li><strong>Agenda:</strong> {{ selected_schedule['name'] }} · {{ humanize_days(selected_schedule['days_of_week']) }}{% if selected_schedule['start_time'] %} às {{ selected_schedule['start_time'] }}{% endif %}</li>
-          {% else %}
-          <li><strong>Agenda:</strong> Execução única</li>
-          {% endif %}
-        </ul>
+        <div class="info-grid">
+          <div class="badge">Conexão</div>
+          <div class="code-block">{{ jdbc_preview or 'JDBC montado automaticamente' }}</div>
+          <div class="muted">Banco: {{ connection_summary.database or '—' }} · Host: {{ connection_summary.host or '—' }} · Tipo: {{ connection_summary.type or '—' }} · Usuário: {{ connection_summary.user or '—' }}</div>
+        </div>
+        <div class="summary-list compact">
+          <div><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</div>
+          <div><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</div>
+          <div>
+            <strong>Agenda:</strong>
+            {% if selected_schedule %}
+              {{ selected_schedule['name'] }} · {{ humanize_days(selected_schedule['days_of_week']) }}{% if selected_schedule['start_time'] %} às {{ selected_schedule['start_time'] }}{% endif %}
+            {% else %}
+              Execução única
+            {% endif %}
+          </div>
+        </div>
       </div>
       <div>
         <p class="eyebrow">Gestor padrão</p>
@@ -185,18 +192,19 @@
       </div>
     </div>
     <form action="{{ url_for('extract_teradata', step='executar') }}" method="post" class="actions-inline">
-      <button type="submit" class="button"><span class="icon">🚀</span><span>Iniciar extração</span></button>
+      <button type="submit" name="action" value="save" class="button ghost"><span class="icon">💾</span><span>Salvar</span></button>
+      <button type="submit" name="action" value="execute" class="button"><span class="icon">🚀</span><span>Salvar e executar</span></button>
       <a class="button ghost" href="{{ url_for('extraction_menu') }}"><span class="icon">🏁</span><span>Voltar</span></a>
     </form>
 
     {% if bucket.get('result') %}
     {% set result = bucket.get('result') %}
     <div class="progress">
-      <div class="progress-bar" style="width: {{ result.total and 100 or 0 }}%"></div>
+      <div class="progress-bar" style="width: {{ result.get('total', 0) and 100 or 0 }}%"></div>
     </div>
     <div class="stats">
-      <div class="stat"><strong>{{ result.imported }}</strong><span>Aplicadas</span></div>
-      <div class="stat"><strong>{{ result.total }}</strong><span>Recebidas</span></div>
+      <div class="stat"><strong>{{ result.get('imported', 0) }}</strong><span>Aplicadas</span></div>
+      <div class="stat"><strong>{{ result.get('total', 0) }}</strong><span>Recebidas</span></div>
     </div>
     {% if result.note %}
     <div class="alert info">{{ result.note }}</div>

@@ -2,8 +2,10 @@ import csv
 import importlib
 import os
 import sqlite3
+import threading
 import unicodedata
 import uuid
+from datetime import datetime, time as dtime, timedelta
 from functools import wraps
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -56,6 +58,8 @@ DAYS_OF_WEEK = [
     ("sat", "Sábado"),
     ("sun", "Domingo"),
 ]
+SCHEDULER_STOP = threading.Event()
+SCHEDULER_THREAD = None
 
 
 def normalize_wildcard(term: str):
@@ -113,6 +117,8 @@ def init_db():
             progress INTEGER NOT NULL DEFAULT 0,
             log TEXT,
             error TEXT,
+            next_run_at TEXT,
+            last_run_at TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -252,6 +258,10 @@ def migrate_extraction_jobs():
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN schedule_id INTEGER")
     if columns and "run_once" not in names:
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN run_once INTEGER DEFAULT 1")
+    if columns and "next_run_at" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN next_run_at TEXT")
+    if columns and "last_run_at" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN last_run_at TEXT")
     conn.commit()
     conn.close()
 
@@ -426,12 +436,21 @@ def clear_import_state(flow=None):
         bucket.clear()
 
 
-def create_extraction_job(connector, extraction_type, mode, config, schedule_id=None, run_once=True):
+def create_extraction_job(
+    connector,
+    extraction_type,
+    mode,
+    config,
+    schedule_id=None,
+    run_once=True,
+    status="pending",
+    next_run_at=None,
+):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             connector,
@@ -446,6 +465,8 @@ def create_extraction_job(connector, extraction_type, mode, config, schedule_id=
             config.get("extra_params"),
             schedule_id,
             1 if run_once else 0,
+            status,
+            next_run_at,
         ),
     )
     conn.commit()
@@ -454,7 +475,16 @@ def create_extraction_job(connector, extraction_type, mode, config, schedule_id=
     return job_id
 
 
-def update_extraction_job(job_id, status=None, progress=None, log=None, error=None):
+def update_extraction_job(
+    job_id,
+    status=None,
+    progress=None,
+    log=None,
+    error=None,
+    next_run_at=None,
+    last_run_at=None,
+    run_once=None,
+):
     conn = sqlite3.connect(DB_PATH)
     sets = []
     params = []
@@ -470,6 +500,15 @@ def update_extraction_job(job_id, status=None, progress=None, log=None, error=No
     if error is not None:
         sets.append("error = ?")
         params.append(error)
+    if next_run_at is not None:
+        sets.append("next_run_at = ?")
+        params.append(next_run_at)
+    if last_run_at is not None:
+        sets.append("last_run_at = ?")
+        params.append(last_run_at)
+    if run_once is not None:
+        sets.append("run_once = ?")
+        params.append(1 if run_once else 0)
     sets.append("updated_at = CURRENT_TIMESTAMP")
     params.append(job_id)
     conn.execute(f"UPDATE extraction_jobs SET {', '.join(sets)} WHERE id = ?", params)
@@ -530,6 +569,81 @@ def parse_schedule_form(form):
         "interval_minutes": interval_minutes,
         "repeat_forever": repeat_forever,
     }
+
+
+def compute_next_run(schedule, after=None):
+    def sval(key):
+        try:
+            return schedule[key]
+        except Exception:
+            return schedule.get(key) if isinstance(schedule, dict) else None
+
+    after = after or datetime.utcnow()
+    allowed_days = None
+    days_raw = sval("days_of_week")
+    if days_raw:
+        allowed_days = {d.strip() for d in days_raw.split(",") if d.strip()}
+
+    def matches_day(dt):
+        if not allowed_days:
+            return True
+        return dt.strftime("%a").lower()[:3] in allowed_days
+
+    try:
+        base_date = (
+            datetime.strptime(sval("start_date"), "%Y-%m-%d").date()
+            if sval("start_date")
+            else after.date()
+        )
+    except ValueError:
+        base_date = after.date()
+
+    try:
+        base_time = (
+            datetime.strptime(sval("start_time"), "%H:%M").time()
+            if sval("start_time")
+            else dtime(hour=0, minute=0)
+        )
+    except ValueError:
+        base_time = dtime(hour=0, minute=0)
+
+    interval = sval("interval_minutes")
+    candidate = datetime.combine(base_date, base_time)
+
+    def bump_to_allowed(dt):
+        if matches_day(dt):
+            return dt
+        for i in range(1, 8):
+            shifted = dt + timedelta(days=i)
+            if matches_day(shifted):
+                return datetime.combine(shifted.date(), base_time)
+        return None
+
+    candidate = bump_to_allowed(candidate)
+    if not candidate:
+        return None
+
+    if candidate < after:
+        if interval:
+            delta = timedelta(minutes=interval)
+            safety = 0
+            while candidate < after and safety < 2000:
+                candidate += delta
+                if not matches_day(candidate):
+                    candidate = bump_to_allowed(candidate)
+                    if candidate is None:
+                        return None
+                safety += 1
+        else:
+            candidate = bump_to_allowed(datetime.combine(after.date(), base_time))
+            if candidate and candidate < after:
+                candidate = bump_to_allowed(candidate + timedelta(days=1))
+    return candidate
+
+
+def next_run_text(schedule, after=None):
+    nxt = compute_next_run(schedule, after=after)
+    return nxt.isoformat() if nxt else None
 
 
 def humanize_days(days_str):
@@ -760,6 +874,101 @@ def run_teradata_job(config, mode, extraction_type, job_id):
         "errors": errors,
         "note": note,
     }
+
+
+def job_to_config(job):
+    def val(key):
+        try:
+            return job[key]
+        except Exception:
+            return job.get(key) if isinstance(job, dict) else None
+
+    return {
+        "host": val("host"),
+        "jdbc_url": val("jdbc_url"),
+        "connection_type": val("connection_type"),
+        "database_name": val("database_name"),
+        "username": val("username"),
+        "password": val("password"),
+        "extra_params": val("extra_params"),
+    }
+
+
+def finalize_next_run(job_id, job):
+    def val(key):
+        try:
+            return job[key]
+        except Exception:
+            return job.get(key) if isinstance(job, dict) else None
+
+    if val("run_once") or not val("schedule_id"):
+        update_extraction_job(job_id, next_run_at=None, run_once=True, last_run_at=datetime.utcnow().isoformat())
+        return
+
+    schedule = get_schedule(val("schedule_id"))
+    if not schedule:
+        update_extraction_job(job_id, next_run_at=None, run_once=True, last_run_at=datetime.utcnow().isoformat())
+        return
+
+    upcoming = next_run_text(schedule, after=datetime.utcnow())
+    params = {
+        "next_run_at": upcoming,
+        "last_run_at": datetime.utcnow().isoformat(),
+    }
+    def sval(key):
+        try:
+            return schedule[key]
+        except Exception:
+            return schedule.get(key) if isinstance(schedule, dict) else None
+
+    if not sval("repeat_forever") and not sval("interval_minutes"):
+        params["run_once"] = True
+    update_extraction_job(job_id, **params)
+
+
+def run_extraction_job(job):
+    job_id = job["id"] if isinstance(job, dict) or hasattr(job, "__getitem__") else job
+    job_row = job if isinstance(job, dict) else get_job(job_id)
+    config = job_to_config(job_row)
+    update_extraction_job(job_row["id"], status="running", progress=0, error=None)
+    result = run_teradata_job(config, job_row["mode"], job_row["extraction_type"], job_row["id"])
+    finalize_next_run(job_row["id"], job_row)
+    return result
+
+
+def dispatch_due_jobs():
+    now = datetime.utcnow()
+    rows = query_db(
+        """
+        SELECT * FROM extraction_jobs
+        WHERE schedule_id IS NOT NULL AND run_once = 0 AND next_run_at IS NOT NULL AND status != 'running'
+        ORDER BY next_run_at ASC
+        """
+    )
+    for row in rows:
+        try:
+            due_at = datetime.fromisoformat(row["next_run_at"])
+        except Exception:
+            continue
+        if due_at <= now:
+            run_extraction_job(row)
+
+
+def start_scheduler():
+    global SCHEDULER_THREAD
+    if SCHEDULER_THREAD and SCHEDULER_THREAD.is_alive():
+        return
+
+    def worker():
+        while not SCHEDULER_STOP.is_set():
+            try:
+                dispatch_due_jobs()
+            except Exception as exc:  # pragma: no cover - logging convenience
+                print(f"Scheduler error: {exc}")
+            SCHEDULER_STOP.wait(30)
+
+    SCHEDULER_THREAD = threading.Thread(target=worker, daemon=True)
+    SCHEDULER_THREAD.start()
 
 
 def parse_tabular(file_storage, delimiter):
@@ -2010,21 +2219,48 @@ def extract_teradata():
             return redirect(url_for("extract_teradata"))
 
         if request.method == "POST":
+            action = request.form.get("action", "execute")
             config = bucket.get("config", {})
             extraction_type = bucket.get("extraction_type", "metadata")
             mode = bucket.get("mode", "incremental")
+            schedule_id = bucket.get("schedule_id")
+            run_once = bucket.get("run_once", True)
+            status = "pending"
+            next_run_at = None
+
+            schedule = get_schedule(schedule_id) if schedule_id else None
+            if not run_once and schedule:
+                next_run_at = next_run_text(schedule)
+                status = "scheduled"
 
             job_id = create_extraction_job(
                 "teradata",
                 extraction_type,
                 mode,
                 config,
-                schedule_id=bucket.get("schedule_id"),
-                run_once=bucket.get("run_once", True),
+                schedule_id=schedule_id,
+                run_once=run_once,
+                status=status,
+                next_run_at=next_run_at,
             )
-            result = run_teradata_job(config, mode, extraction_type, job_id)
+
+            if action == "save":
+                bucket["result"] = {
+                    "job_id": job_id,
+                    "saved_only": True,
+                    "next_run_at": next_run_at,
+                    "status": status,
+                }
+                flash("Job salvo. Ele seguirá o schedule selecionado.", "success")
+                return redirect(url_for("extract_teradata", step="executar"))
+
+            job = get_job(job_id)
+            result = run_extraction_job(job)
             bucket["result"] = {"job_id": job_id, **result}
-            flash("Extração finalizada.", "success" if not result["errors"] else "warning")
+            flash(
+                "Extração finalizada.",
+                "success" if not result["errors"] else "warning",
+            )
             return redirect(url_for("extract_teradata", step="executar"))
 
         selected_schedule = None
@@ -2037,6 +2273,13 @@ def extract_teradata():
             bucket=bucket,
             selected_schedule=selected_schedule,
             humanize_days=humanize_days,
+            jdbc_preview=bucket.get("config", {}).get("jdbc_url"),
+            connection_summary={
+                "database": bucket.get("config", {}).get("database_name"),
+                "host": bucket.get("config", {}).get("host"),
+                "type": bucket.get("config", {}).get("connection_type"),
+                "user": bucket.get("config", {}).get("username"),
+            },
         )
 
     if step == "config":
@@ -2153,6 +2396,14 @@ def monitor_jobs():
     return render_template("jobs.html", jobs=jobs, schedules=schedules, humanize_days=humanize_days)
 
 
+@app.route("/jobs/table")
+@login_required
+def jobs_table_partial():
+    jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
+    schedules = {sched["id"]: sched for sched in get_schedules()}
+    return render_template("jobs_table.html", jobs=jobs, schedules=schedules, humanize_days=humanize_days)
+
+
 @app.route("/jobs/<int:job_id>/restart", methods=["POST"])
 @login_required
 def restart_job(job_id):
@@ -2161,17 +2412,8 @@ def restart_job(job_id):
         flash("Job não encontrado.", "error")
         return redirect(url_for("monitor_jobs"))
 
-    config = {
-        "host": job["host"],
-        "jdbc_url": job["jdbc_url"],
-        "connection_type": job["connection_type"],
-        "database_name": job["database_name"],
-        "username": job["username"],
-        "password": job["password"],
-        "extra_params": job["extra_params"],
-    }
     update_extraction_job(job_id, status="pending", progress=0, error=None)
-    result = run_teradata_job(config, job["mode"], job["extraction_type"], job_id)
+    result = run_extraction_job(job)
     flash(
         "Job reiniciado.",
         "success" if not result.get("errors") else "warning",
@@ -2294,6 +2536,7 @@ def logout():
 
 
 init_db()
+start_scheduler()
 
 
 if __name__ == "__main__":
