@@ -2,6 +2,7 @@ import csv
 import os
 import sqlite3
 import unicodedata
+import uuid
 from functools import wraps
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -33,6 +34,7 @@ app = Flask(__name__)
 app.secret_key = "change-me"  # Needed for flash messages.
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
+IMPORT_CACHE = {}
 
 
 def init_db():
@@ -168,6 +170,21 @@ def bulk_insert(records):
     conn.close()
 
 
+def get_import_bucket():
+    token = session.get("import_token")
+    if not token:
+        token = uuid.uuid4().hex
+        session["import_token"] = token
+    if token not in IMPORT_CACHE:
+        IMPORT_CACHE[token] = {}
+    return IMPORT_CACHE[token]
+
+
+def clear_import_state():
+    bucket = get_import_bucket()
+    bucket.clear()
+
+
 def login_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
@@ -213,6 +230,37 @@ def parse_xlsx(file_storage):
         if name and secretaria and coordenacao and email:
             records.append((name, secretaria, coordenacao, email))
     return records
+
+
+def parse_tabular(file_storage, delimiter):
+    filename = file_storage.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower()
+
+    if ext == "csv":
+        content = file_storage.stream.read().decode("utf-8-sig")
+        reader = csv.DictReader(StringIO(content), delimiter=delimiter or ";")
+        headers = [h or "Coluna" for h in (reader.fieldnames or [])]
+        rows = []
+        for row in reader:
+            rows.append({h: (row.get(h, "") or "").strip() for h in headers})
+        return headers, rows
+
+    if ext in {"xlsx", "xls"}:
+        file_bytes = BytesIO(file_storage.read())
+        workbook = load_workbook(filename=file_bytes, data_only=True)
+        sheet = workbook.active
+        excel_rows = list(sheet.iter_rows(values_only=True))
+        if not excel_rows:
+            return [], []
+        headers = [str(h) if h is not None else "Coluna" for h in excel_rows[0]]
+        rows = []
+        for data_row in excel_rows[1:]:
+            values = [str(cell).strip() if cell is not None else "" for cell in data_row]
+            mapped = {headers[i]: values[i] for i in range(min(len(headers), len(values)))}
+            rows.append(mapped)
+        return headers, rows
+
+    raise ValueError("Formato não suportado")
 
 
 @app.route("/")
@@ -508,37 +556,150 @@ def search():
 @app.route("/importar", methods=["GET", "POST"])
 @login_required
 def import_records():
-    if request.method == "GET":
-        return render_template("import.html")
+    return render_template("import.html")
 
-    upload = request.files.get("file")
-    delimiter = request.form.get("delimiter", ";").strip() or ";"
 
-    if not upload or not upload.filename:
-        flash("Selecione um arquivo CSV ou XLSX para importar.", "error")
-        return redirect(url_for("import_records"))
+def require_import_data():
+    bucket = get_import_bucket()
+    headers = bucket.get("headers") or []
+    rows = bucket.get("rows") or []
+    if not headers or not rows:
+        flash("Envie um arquivo para começar o fluxo de importação.", "error")
+        clear_import_state()
+        return None, None
+    return headers, rows
 
-    ext = upload.filename.rsplit(".", 1)[-1].lower()
 
-    try:
-        if ext == "csv":
-            records = parse_csv(upload, delimiter)
-        elif ext in {"xlsx", "xls"}:
-            records = parse_xlsx(upload)
-        else:
-            flash("Formato não suportado. Envie um CSV ou XLSX.", "error")
-            return redirect(url_for("import_records"))
-    except Exception:
-        flash("Não foi possível ler o arquivo enviado. Verifique o formato e tente novamente.", "error")
-        return redirect(url_for("import_records"))
+@app.route("/importar/gestores", methods=["GET", "POST"])
+@login_required
+def import_gestors_flow():
+    step = request.args.get("step", "upload")
+    bucket = get_import_bucket()
 
-    if not records:
-        flash("Nenhum registro válido encontrado. Confira as colunas e se há dados preenchidos.", "error")
-        return redirect(url_for("import_records"))
+    if request.method == "POST" and step == "upload":
+        upload = request.files.get("file")
+        delimiter = request.form.get("delimiter", ";").strip() or ";"
 
-    bulk_insert(records)
-    flash(f"Importação concluída com {len(records)} registro(s).", "success")
-    return redirect(url_for("list_gestors"))
+        if not upload or not upload.filename:
+            flash("Selecione um arquivo CSV ou XLSX para continuar.", "error")
+            return redirect(url_for("import_gestors_flow"))
+
+        try:
+            headers, rows = parse_tabular(upload, delimiter)
+        except Exception:
+            flash("Não foi possível ler o arquivo. Confirme o formato e o delimitador.", "error")
+            return redirect(url_for("import_gestors_flow"))
+
+        if not rows:
+            flash("Nenhuma linha encontrada para importar.", "error")
+            return redirect(url_for("import_gestors_flow"))
+
+        bucket["headers"] = headers
+        bucket["rows"] = rows
+        bucket.pop("mapping", None)
+        bucket.pop("result", None)
+        return redirect(url_for("import_gestors_flow", step="mapear"))
+
+    if request.method == "POST" and step == "mapear":
+        headers, rows = require_import_data()
+        if headers is None:
+            return redirect(url_for("import_gestors_flow"))
+
+        mapping = {
+            "name": request.form.get("map_name"),
+            "secretaria": request.form.get("map_secretaria"),
+            "coordenacao": request.form.get("map_coordenacao"),
+            "email": request.form.get("map_email"),
+        }
+
+        if not all(mapping.values()):
+            flash("Mapeie todas as colunas obrigatórias para seguir.", "error")
+            return redirect(url_for("import_gestors_flow", step="mapear"))
+
+        bucket["mapping"] = mapping
+        return redirect(url_for("import_gestors_flow", step="confirmar"))
+
+    if request.method == "POST" and step == "executar":
+        headers, rows = require_import_data()
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_gestors_flow"))
+
+        total = len(rows)
+        imported = 0
+        errors = []
+        prepared = []
+
+        header_set = set(headers)
+        for row in rows:
+            missing_cols = [col for col in mapping.values() if col not in header_set]
+            if missing_cols:
+                errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
+                break
+
+            name = row.get(mapping["name"], "").strip()
+            secretaria = row.get(mapping["secretaria"], "").strip()
+            coordenacao = row.get(mapping["coordenacao"], "").strip()
+            email = row.get(mapping["email"], "").strip()
+
+            if not all([name, secretaria, coordenacao, email]):
+                errors.append("Linha ignorada por falta de campos obrigatórios.")
+                continue
+
+            prepared.append((name, secretaria, coordenacao, email))
+
+        if prepared:
+            bulk_insert(prepared)
+            imported = len(prepared)
+
+        bucket["result"] = {
+            "total": total,
+            "imported": imported,
+            "errors": errors,
+            "progress": 100 if total else 0,
+        }
+        bucket["rows"] = prepared
+        return redirect(url_for("import_gestors_flow", step="resultado"))
+
+    if step == "mapear":
+        headers, rows = require_import_data()
+        if headers is None:
+            return redirect(url_for("import_gestors_flow"))
+        return render_template("import_gestors.html", step="mapear", headers=headers, preview=rows[:5])
+
+    if step == "confirmar":
+        headers, rows = require_import_data()
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_gestors_flow"))
+
+        preview = []
+        for row in rows[:5]:
+            preview.append(
+                {
+                    "name": row.get(mapping.get("name"), ""),
+                    "secretaria": row.get(mapping.get("secretaria"), ""),
+                    "coordenacao": row.get(mapping.get("coordenacao"), ""),
+                    "email": row.get(mapping.get("email"), ""),
+                }
+            )
+
+        return render_template(
+            "import_gestors.html",
+            step="confirmar",
+            mapping=mapping,
+            preview=preview,
+            total=len(rows),
+        )
+
+    if step == "resultado":
+        result = bucket.get("result")
+        if not result:
+            return redirect(url_for("import_gestors_flow"))
+        return render_template("import_gestors.html", step="resultado", result=result)
+
+    clear_import_state()
+    return render_template("import_gestors.html", step="upload")
 
 
 @app.route("/configuracoes")

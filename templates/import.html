@@ -1,29 +1,33 @@
 {% extends "base.html" %}
-{% block title %}Importar registros{% endblock %}
+{% block title %}Importar dados{% endblock %}
 {% block content %}
 <section class="form-section">
   <div class="section-header">
     <div>
-      <p class="eyebrow">Importação</p>
-      <h2>Importar gestores via arquivo</h2>
-      <p class="subtitle">Envie um CSV ou XLSX com as colunas <strong>Gestor</strong>, <strong>Secretaria</strong>, <strong>Coordenação</strong> e <strong>E-mail</strong>.</p>
+      <p class="eyebrow">Importações</p>
+      <h2>Escolha o que deseja importar</h2>
+      <p class="subtitle">Cada tipo de dado possui seu próprio fluxo de importação.</p>
     </div>
   </div>
-  <form action="{{ url_for('import_records') }}" method="post" enctype="multipart/form-data">
-    <label for="file">Arquivo (CSV ou XLSX)</label>
-    <input type="file" name="file" id="file" accept=".csv,.xlsx,.xls" required />
-
-    <label for="delimiter">Delimitador (para CSV)</label>
-    <input type="text" name="delimiter" id="delimiter" value=";" maxlength="3" />
-
-    <div class="form-helper">
-      <p>O delimitador é usado apenas para CSV (ex: "," ou ";"). Para XLSX ele é ignorado.</p>
+  <div class="grid-two">
+    <a class="card action-card" href="{{ url_for('import_gestors_flow') }}">
+      <div class="icon-circle">⬆️</div>
+      <div>
+        <p class="eyebrow">Gestores</p>
+        <h3>Importar gestores</h3>
+        <p>Fluxo guiado em etapas com mapeamento de colunas e acompanhamento do progresso.</p>
+      </div>
+      <span class="pill">CSV / XLSX</span>
+    </a>
+    <div class="card action-card muted">
+      <div class="icon-circle">🗂️</div>
+      <div>
+        <p class="eyebrow">Bases</p>
+        <h3>Importar bases</h3>
+        <p>Em breve você poderá importar bases com validação de titulares e substitutos.</p>
+      </div>
+      <span class="pill">Breve</span>
     </div>
-
-    <div class="actions-inline">
-      <button type="submit" class="button"><span class="icon">⬆️</span><span>Importar</span></button>
-      <a class="button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">📄</span><span>Ver cadastros</span></a>
-    </div>
-  </form>
+  </div>
 </section>
 {% endblock %}

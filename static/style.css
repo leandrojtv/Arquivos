@@ -353,6 +353,149 @@ table td.compact {
   gap: 0.75rem;
 }
 
+.grid-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.action-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.action-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.action-card.muted {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.icon-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #58a6ff, #6366f1);
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.wizard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.wizard-step {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.75rem;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.wizard-step.active {
+  border-color: rgba(88, 166, 255, 0.65);
+  color: #fff;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.wizard-step.done {
+  border-color: rgba(99, 255, 191, 0.45);
+  color: #c2ffd9;
+  background: rgba(99, 255, 191, 0.08);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-scroll th,
+.table-scroll td {
+  padding: 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.table-scroll th {
+  text-align: left;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.progress {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  height: 14px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #58a6ff, #6366f1);
+  width: 0;
+  transition: width 0.4s ease;
+}
+
+.stats {
+  display: flex;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.stat {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.stat strong {
+  display: block;
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+
+.alert.success {
+  border: 1px solid rgba(99, 255, 191, 0.45);
+  background: rgba(99, 255, 191, 0.08);
+  color: #c2ffd9;
+}
+
+.alert.error {
+  border: 1px solid rgba(255, 138, 128, 0.45);
+  background: rgba(255, 138, 128, 0.1);
+  color: #ffd3cd;
+}
+
 .messages {
   list-style: none;
   padding: 0;

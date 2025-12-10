@@ -68,11 +68,7 @@ A aplicação ficará disponível em `http://localhost:8000`.
 
 ## Importar gestores via arquivo
 
-1. Acesse o menu **Importar** na aplicação.
-2. Selecione um arquivo **CSV** ou **XLSX** contendo as colunas:
-   - `Gestor` (ou `Nome`)
-   - `Secretaria`
-   - `Coordenação`
-   - `E-mail`
-3. Informe o delimitador ao usar CSV (padrão `;`). Para XLSX ele é ignorado.
-4. Envie o arquivo e, ao concluir, os gestores são adicionados automaticamente à base de dados.
+1. Acesse o menu **Importar** e escolha **Importar gestores**.
+2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
+3. Na etapa **Mapeamento**, associe cada campo do gestor (`Nome`, `Secretaria`, `Coordenação`, `E-mail`) a uma coluna do arquivo — você pode escolher qualquer coluna disponível.
+4. Revise o resumo e inicie a importação na etapa final. O progresso, total processado e eventuais avisos são exibidos na tela, com opção de reiniciar ou voltar aos gestores.
