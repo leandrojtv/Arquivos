@@ -295,33 +295,67 @@ def normalize_field(label: str) -> str:
     return cleaned
 
 
-def bulk_insert(records):
+def bulk_upsert_gestors(records):
     conn = sqlite3.connect(DB_PATH)
-    conn.executemany(
-        "INSERT INTO gestors (name, secretaria, coordenacao, email) VALUES (?, ?, ?, ?)",
-        records,
-    )
+    cur = conn.cursor()
+    for rec in records:
+        name, secretaria, coordenacao, email = rec
+        existing = cur.execute(
+            "SELECT id FROM gestors WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+        if existing:
+            cur.execute(
+                "UPDATE gestors SET secretaria = ?, coordenacao = ?, email = ? WHERE id = ?",
+                (secretaria, coordenacao, email, existing[0]),
+            )
+        else:
+            cur.execute(
+                "INSERT INTO gestors (name, secretaria, coordenacao, email) VALUES (?, ?, ?, ?)",
+                rec,
+            )
     conn.commit()
     conn.close()
 
 
-def bulk_insert_bases(records):
+def bulk_upsert_bases(records):
     conn = sqlite3.connect(DB_PATH)
-    prepared = []
+    cur = conn.cursor()
     for rec in records:
         if len(rec) == 6:
-            prepared.append((*rec, "import", None))
+            name, ambiente, descricao, gestor_id, sub1_id, sub2_id = rec
+            source_connector, source_job_id = "import", None
         elif len(rec) == 7:
-            prepared.append((*rec, None))
+            name, ambiente, descricao, gestor_id, sub1_id, sub2_id, source_job_id = rec
+            source_connector = None
         else:
-            prepared.append(rec)
-    conn.executemany(
-        """
-        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        prepared,
-    )
+            name, ambiente, descricao, gestor_id, sub1_id, sub2_id, source_connector, source_job_id = rec
+
+        existing = cur.execute(
+            "SELECT id FROM bases WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+
+        if existing:
+            cur.execute(
+                "UPDATE bases SET ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ? WHERE id = ?",
+                (ambiente, descricao, gestor_id, sub1_id, sub2_id, existing[0]),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    ambiente,
+                    descricao,
+                    gestor_id,
+                    sub1_id,
+                    sub2_id,
+                    source_connector or "import",
+                    source_job_id,
+                ),
+            )
     conn.commit()
     conn.close()
 
@@ -1388,7 +1422,7 @@ def import_gestors_flow():
             prepared.append((name, secretaria, coordenacao, email))
 
         if prepared:
-            bulk_insert(prepared)
+            bulk_upsert_gestors(prepared)
             imported = len(prepared)
 
         bucket["result"] = {
@@ -1562,7 +1596,7 @@ def import_bases_flow():
             prepared.append((name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id))
 
         if prepared:
-            bulk_insert_bases(prepared)
+            bulk_upsert_bases(prepared)
             imported = len(prepared)
 
         bucket["result"] = {

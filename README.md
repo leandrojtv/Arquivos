@@ -85,6 +85,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 - Edição e exclusão tanto de gestores (quando não vinculados) quanto de bases.
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
 - Importação em massa de bases com mapeamento de colunas, gestor titular obrigatório e substitutos opcionais vinculados pelo nome.
+  - Arquivos exportados podem ser reimportados para **atualizar** gestores ou bases existentes com base no nome, evitando duplicidades.
 - Extração guiada de metadados do Teradata com montagem automática da string JDBC, teste de conexão e aplicação direta nas bases.
 - Download de modelos XLSX para cada tipo de importação e exportação dos resultados filtrados (bases e gestores) prontos para reimportar.
 - Relatórios com gráfico de cobertura de gestores, total de gestores cadastrados e distribuição de bases por coordenação e ambiente.
@@ -108,6 +109,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Na etapa **Mapeamento**, associe cada campo do gestor (`Nome`, `Secretaria`, `Coordenação`, `E-mail`) a uma coluna do arquivo — você pode escolher qualquer coluna disponível.
 4. Revise o resumo e inicie a importação na etapa final. O progresso, total processado e eventuais avisos são exibidos na tela, com opção de reiniciar ou voltar aos gestores.
+5. Se você reimportar um arquivo previamente exportado, os gestores existentes serão atualizados pelo **nome**, evitando registros duplicados.
 
 ## Importar bases via arquivo
 
@@ -116,6 +118,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Gestor`) e, se desejar, informe também `Ambiente`, `Descrição` e as colunas de **1º** e **2º substitutos**.
 4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos (quando informados), mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.
+5. Reimportar um XLSX/CSV exportado aplica **atualizações** nas bases existentes (busca por nome da base) em vez de duplicar registros.
 
 ## Vincular bases a gestores via arquivo
 
