@@ -6,40 +6,26 @@
     <title>{% block title %}Gestão de Bases e Gestores{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
-  <body>
-    <header class="site-header">
-      <div class="header-main">
-        {% if session.get('user') %}
-        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">
-          <span class="icon">☰</span>
-          <span>Menu</span>
-        </button>
-        {% endif %}
-        <div>
-          <h1>Cadastro de Bases e Gestores</h1>
-          <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
-        </div>
-        {% if session.get('user') %}
-        <div class="user-menu" tabindex="0">
-          <div class="user-trigger">
-            <div class="avatar">{{ session.get('user')[0]|upper }}</div>
-            <span class="user-name">{{ session.get('user') }}</span>
-            <span class="chevron">▾</span>
+  <body class="app-shell">
+    <div class="dashboard-shell {% if session.get('user') %}has-sidebar{% endif %}">
+      {% if session.get('user') %}
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <div class="brand">
+            <div class="brand-icon">DB</div>
+            <div>
+              <p class="eyebrow">Console</p>
+              <h2>Gestão</h2>
+            </div>
           </div>
-          <div class="user-dropdown">
-            <a href="{{ url_for('settings') }}">Configurações</a>
-            <a href="{{ url_for('monitor_jobs') }}">Jobs de extração</a>
-            <a href="{{ url_for('logout') }}">Sair</a>
-          </div>
+          <button class="icon-button ghost close-sidebar" type="button" aria-label="Fechar menu" data-target="sidebar">✕</button>
         </div>
-        {% endif %}
-      </div>
-      <nav class="main-nav" id="main-menu">
-        {% if session.get('user') %}
-        <button type="button" class="button nav-button primary open-modal nav-new" data-target="novo-modal">
-          <span class="icon">✚</span><span>Novo</span>
-        </button>
-        <div class="nav-links">
+        <div class="sidebar-actions">
+          <button type="button" class="button nav-button primary open-modal nav-new" data-target="novo-modal">
+            <span class="icon">✚</span><span>Novo</span>
+          </button>
+        </div>
+        <nav class="main-nav open" id="main-menu">
           <a class="button nav-button ghost" href="{{ url_for('landing') }}"><span class="icon">🏠</span><span>Início</span></a>
           <a class="button nav-button ghost" href="{{ url_for('list_bases') }}"><span class="icon">🗂️</span><span>Bases</span></a>
           <a class="button nav-button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">👥</span><span>Gestores</span></a>
@@ -47,12 +33,44 @@
           <a class="button nav-button ghost" href="{{ url_for('import_records') }}"><span class="icon">⬆️</span><span>Importar</span></a>
           <a class="button nav-button ghost" href="{{ url_for('reports') }}"><span class="icon">📈</span><span>Relatórios</span></a>
           <a class="button nav-button ghost" href="{{ url_for('extraction_menu') }}"><span class="icon">🛰️</span><span>Extração</span></a>
+        </nav>
+        <div class="sidebar-footer">
+          <p class="muted">Layout inspirado no template Vue.js admin da Cruip.</p>
         </div>
-        {% else %}
-        <a href="{{ url_for('login') }}" class="pill">Login</a>
-        {% endif %}
-      </nav>
-    </header>
+      </aside>
+      {% endif %}
+
+      <div class="workspace">
+        <header class="site-header">
+          <div class="header-main">
+            {% if session.get('user') %}
+            <button class="menu-toggle ghost" type="button" aria-expanded="false" aria-controls="sidebar">
+              <span class="icon">☰</span>
+            </button>
+            {% endif %}
+            <div>
+              <p class="eyebrow">Painel</p>
+              <h1>Cadastro de Bases e Gestores</h1>
+              <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
+            </div>
+            {% if session.get('user') %}
+            <div class="user-menu" tabindex="0">
+              <div class="user-trigger">
+                <div class="avatar">{{ session.get('user')[0]|upper }}</div>
+                <span class="user-name">{{ session.get('user') }}</span>
+                <span class="chevron">▾</span>
+              </div>
+              <div class="user-dropdown">
+                <a href="{{ url_for('settings') }}">Configurações</a>
+                <a href="{{ url_for('monitor_jobs') }}">Jobs de extração</a>
+                <a href="{{ url_for('logout') }}">Sair</a>
+              </div>
+            </div>
+            {% else %}
+            <a href="{{ url_for('login') }}" class="pill">Login</a>
+            {% endif %}
+          </div>
+        </header>
     {% if session.get('user') %}
     <div class="modal-overlay" id="novo-modal" aria-hidden="true">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="novo-title">
@@ -84,6 +102,8 @@
       {% endwith %}
       {% block content %}{% endblock %}
     </main>
+      </div>
+    </div>
     {% if session.get('user') %}
     <script>
       const toggleModal = (targetId, open) => {
@@ -111,30 +131,42 @@
           toggleModal(overlay.id, false);
         }
 
+        const sidebar = document.getElementById('sidebar');
         const menuToggle = document.querySelector('.menu-toggle');
-        const mainNav = document.getElementById('main-menu');
-        if (menuToggle && mainNav && !mainNav.contains(event.target) && !menuToggle.contains(event.target)) {
-          mainNav.classList.remove('open');
+        if (sidebar && menuToggle && !sidebar.contains(event.target) && !menuToggle.contains(event.target)) {
+          sidebar.classList.remove('open');
           menuToggle.setAttribute('aria-expanded', 'false');
         }
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           document.querySelectorAll('.modal-overlay.open').forEach((el) => toggleModal(el.id, false));
+          const sidebar = document.getElementById('sidebar');
+          const toggle = document.querySelector('.menu-toggle');
+          if (sidebar && toggle) {
+            sidebar.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+          }
         }
       });
       const menuToggle = document.querySelector('.menu-toggle');
-      const mainNav = document.getElementById('main-menu');
-      if (menuToggle && mainNav) {
-        if (window.innerWidth > 900) {
-          mainNav.classList.add('open');
+      const sidebar = document.getElementById('sidebar');
+      if (menuToggle && sidebar) {
+        if (window.innerWidth > 1024) {
+          sidebar.classList.add('open');
           menuToggle.setAttribute('aria-expanded', 'true');
         }
         menuToggle.addEventListener('click', () => {
-          const isOpen = mainNav.classList.toggle('open');
+          const isOpen = sidebar.classList.toggle('open');
           menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         });
       }
+      document.querySelectorAll('.close-sidebar').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const target = document.getElementById(btn.dataset.target);
+          if (target) target.classList.remove('open');
+        });
+      });
     </script>
     {% endif %}
   </body>
