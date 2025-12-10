@@ -666,7 +666,7 @@ def landing():
 def reports():
     coverage_rows = query_db(
         """
-        SELECT COALESCE(NULLIF(TRIM(g.nome), ''), 'Sem gestor') AS label, COUNT(*) AS total
+        SELECT COALESCE(NULLIF(TRIM(g.name), ''), 'Sem gestor') AS label, COUNT(*) AS total
         FROM bases b
         LEFT JOIN gestors g ON g.id = b.gestor_id
         GROUP BY label
