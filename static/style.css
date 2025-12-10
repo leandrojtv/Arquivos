@@ -853,12 +853,6 @@ table td.compact {
   gap: 1rem;
 }
 
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
-}
-
 .search-hero-input.large {
   grid-template-columns: auto 1fr auto;
   padding: 0.65rem 0.65rem 0.65rem 0.85rem;

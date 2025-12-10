@@ -38,13 +38,7 @@
         <p class="stat-label">Resumo</p>
         <p class="stat-value">{{ total_bases }} bases</p>
         <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
-        <a class="button tertiary" href="{{ url_for('search') }}"><span class="icon">📑</span><span>Ver todos</span></a>
       </div>
-    </div>
-
-    <div class="action-grid">
-      <a class="button primary" href="{{ url_for('new_gestor_form') }}"><span class="icon">👤</span><span>Cadastrar gestor</span></a>
-      <a class="button ghost" href="{{ url_for('new_base_form') }}"><span class="icon">🗂️</span><span>Cadastrar base</span></a>
     </div>
   </div>
 </section>
