@@ -2367,6 +2367,7 @@ def schedules():
                 "name": sched["name"],
                 "start_date": sched["start_date"],
                 "start_time": sched["start_time"],
+                "days_of_week": sched["days_of_week"],
                 "days_label": humanize_days(sched["days_of_week"]),
                 "interval": sched["interval_minutes"],
                 "repeat_forever": bool(sched["repeat_forever"]),

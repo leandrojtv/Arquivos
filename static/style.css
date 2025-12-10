@@ -582,6 +582,11 @@ table td.compact {
   gap: 1rem;
 }
 
+.grid-two.compact {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
 .grid-two.wide-left {
   grid-template-columns: minmax(320px, 1.35fr) minmax(260px, 1fr);
   align-items: start;
@@ -903,6 +908,12 @@ table td.compact {
   margin-bottom: 1rem;
 }
 
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .button.full {
   width: 100%;
   justify-content: center;
@@ -914,6 +925,42 @@ table td.compact {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.25rem;
+}
+
+.section-header.with-action {
+  align-items: flex-end;
+}
+
+.card-header.between {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-strong);
+}
+
+.chip-checkbox input {
+  accent-color: var(--primary);
+}
+
+.align-end {
+  display: flex;
+  align-items: flex-end;
 }
 
 .picker-field {
