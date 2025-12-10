@@ -27,26 +27,148 @@
       <textarea name="descricao" rows="3" placeholder="Descreva a base (opcional)">{{ base['descricao'] or '' if base else '' }}</textarea>
     </label>
     <div class="grid two">
-      <label>Gestor titular
-        <input type="text" name="gestor_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['gestor'] if selected_labels else '' }}" required />
-      </label>
-      <label>1º gestor substituto (opcional)
-        <input type="text" name="substituto1_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['sub1'] if selected_labels else '' }}" />
-      </label>
-      <label>2º gestor substituto (opcional)
-        <input type="text" name="substituto2_id" list="gestor-options" placeholder="Digite e selecione na lista" value="{{ selected_labels['sub2'] if selected_labels else '' }}" />
-      </label>
+      <div class="picker-field">
+        <div class="picker-label">
+          <span>Gestor titular</span>
+          <p class="helper">Obrigatório</p>
+        </div>
+        <div class="picker-actions">
+          <input type="hidden" name="gestor_id" id="gestor_id_input" value="{{ base['gestor_id'] if base else '' }}" required />
+          <div class="selection-pill" id="gestor_label">{{ selected_labels['gestor'] if selected_labels else 'Selecione um gestor' }}</div>
+          <button type="button" class="button ghost gestor-picker-trigger" data-target="gestor_id_input" data-label-target="gestor_label">
+            <span class="icon">👤</span><span>Escolher</span>
+          </button>
+        </div>
+      </div>
+      <div class="picker-field">
+        <div class="picker-label">
+          <span>1º gestor substituto</span>
+          <p class="helper">Opcional</p>
+        </div>
+        <div class="picker-actions">
+          <input type="hidden" name="substituto1_id" id="sub1_id_input" value="{{ base['substituto1_id'] if base else '' }}" />
+          <div class="selection-pill" id="sub1_label">{{ selected_labels['sub1'] if selected_labels else 'Nenhum selecionado' }}</div>
+          <button type="button" class="button ghost gestor-picker-trigger" data-target="sub1_id_input" data-label-target="sub1_label">
+            <span class="icon">🔍</span><span>Buscar</span>
+          </button>
+        </div>
+      </div>
+      <div class="picker-field">
+        <div class="picker-label">
+          <span>2º gestor substituto</span>
+          <p class="helper">Opcional</p>
+        </div>
+        <div class="picker-actions">
+          <input type="hidden" name="substituto2_id" id="sub2_id_input" value="{{ base['substituto2_id'] if base else '' }}" />
+          <div class="selection-pill" id="sub2_label">{{ selected_labels['sub2'] if selected_labels else 'Nenhum selecionado' }}</div>
+          <button type="button" class="button ghost gestor-picker-trigger" data-target="sub2_id_input" data-label-target="sub2_label">
+            <span class="icon">🧭</span><span>Buscar</span>
+          </button>
+        </div>
+      </div>
     </div>
-    <p class="helper">Use a busca da lista abaixo para localizar os gestores; o titular é obrigatório, e os substitutos são opcionais, mas não podem repetir o titular ou entre si.</p>
-    <datalist id="gestor-options">
-      {% for gestor in gestors %}
-        <option value="{{ gestor.id }} - {{ gestor.label }}">{{ gestor.label }}</option>
-      {% endfor %}
-    </datalist>
+    <p class="helper">Use a pesquisa para localizar os gestores; o titular é obrigatório, e os substitutos são opcionais.</p>
     <div class="form-actions">
       <a class="button ghost" href="{{ url_for('list_bases') }}"><span class="icon">↩</span><span>Cancelar</span></a>
       <button type="submit" class="button"><span class="icon">💾</span><span>{{ 'Salvar alterações' if base else 'Cadastrar base' }}</span></button>
     </div>
   </form>
 </section>
+
+<div class="modal-overlay" id="gestor-picker-modal" aria-hidden="true">
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="gestor-picker-title">
+    <header class="modal-header">
+      <div>
+        <p class="eyebrow">Selecionar gestor</p>
+        <h3 id="gestor-picker-title">Busque pelo nome e escolha um gestor</h3>
+        <p class="subtitle">Use a busca para filtrar rapidamente; confirme em "OK" para aplicar.</p>
+      </div>
+      <button type="button" class="icon-button close-modal" data-target="gestor-picker-modal" aria-label="Fechar"><span class="icon">✕</span></button>
+    </header>
+    <div class="picker-search">
+      <label>Buscar gestor
+        <input type="search" id="gestor-search" placeholder="Digite parte do nome, secretaria ou coordenação" />
+      </label>
+    </div>
+    <div class="picker-results" id="gestor-picker-results"></div>
+    <div class="modal-actions">
+      <button type="button" class="button" id="gestor-picker-confirm"><span class="icon">✅</span><span>OK</span></button>
+      <button type="button" class="button ghost close-modal" data-target="gestor-picker-modal"><span class="icon">↩</span><span>Cancelar</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const gestorOptions = {{ gestors|tojson }};
+  const pickerModalId = 'gestor-picker-modal';
+  let pickerContext = null;
+  let stagedSelection = null;
+
+  const renderGestorList = (term = '') => {
+    const list = document.getElementById('gestor-picker-results');
+    if (!list) return;
+    const normalized = term.trim().toLowerCase();
+    list.innerHTML = '';
+    const filtered = gestorOptions.filter((item) => item.label.toLowerCase().includes(normalized));
+    if (!filtered.length) {
+      list.innerHTML = '<p class="muted">Nenhum gestor encontrado.</p>';
+      return;
+    }
+    filtered.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'picker-option' + (stagedSelection && stagedSelection.id === item.id ? ' active' : '');
+      btn.innerHTML = `<span class="icon">👤</span><div><strong>${item.label}</strong></div>`;
+      btn.addEventListener('click', () => {
+        stagedSelection = { id: item.id, label: item.label };
+        renderGestorList(term);
+      });
+      list.appendChild(btn);
+    });
+  };
+
+  const openGestorPicker = (trigger) => {
+    const targetId = trigger.dataset.target;
+    const labelId = trigger.dataset.labelTarget;
+    if (!targetId || !labelId) return;
+    pickerContext = { targetId, labelId };
+    const hidden = document.getElementById(targetId);
+    const currentValue = hidden ? hidden.value : '';
+    stagedSelection = gestorOptions.find((opt) => String(opt.id) === String(currentValue)) || null;
+    const searchInput = document.getElementById('gestor-search');
+    if (searchInput) searchInput.value = '';
+    renderGestorList('');
+    if (typeof toggleModal === 'function') {
+      toggleModal(pickerModalId, true);
+    }
+  };
+
+  const applyGestorSelection = () => {
+    if (!pickerContext || !stagedSelection) {
+      if (typeof toggleModal === 'function') {
+        toggleModal(pickerModalId, false);
+      }
+      return;
+    }
+    const hidden = document.getElementById(pickerContext.targetId);
+    const labelEl = document.getElementById(pickerContext.labelId);
+    if (hidden) hidden.value = stagedSelection.id;
+    if (labelEl) labelEl.textContent = stagedSelection.label;
+    if (typeof toggleModal === 'function') {
+      toggleModal(pickerModalId, false);
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.gestor-picker-trigger').forEach((btn) => {
+      btn.addEventListener('click', () => openGestorPicker(btn));
+    });
+    const confirmBtn = document.getElementById('gestor-picker-confirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', applyGestorSelection);
+    const searchInput = document.getElementById('gestor-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => renderGestorList(e.target.value));
+    }
+  });
+</script>
 {% endblock %}

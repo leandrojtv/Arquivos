@@ -812,6 +812,10 @@ table td.compact {
   border: 1px solid #edf0f3;
 }
 
+.modal-card.wide {
+  width: min(780px, 100%);
+}
+
 .modal-header {
   display: flex;
   align-items: flex-start;
@@ -850,6 +854,84 @@ table td.compact {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.25rem;
+}
+
+.picker-field {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  background: var(--card-strong);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+
+.picker-label {
+  min-width: 180px;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.selection-pill {
+  border: 1px dashed var(--border);
+  background: #f1f5f9;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  min-width: 200px;
+  flex: 1;
+  color: #0f172a;
+}
+
+.picker-search {
+  margin-bottom: 0.9rem;
+}
+
+.picker-results {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.75rem;
+}
+
+.picker-option {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.65rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.picker-option .icon {
+  font-size: 1.1rem;
+}
+
+.picker-option:hover {
+  border-color: var(--primary);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.12);
+}
+
+.picker-option.active {
+  border-color: var(--primary);
+  box-shadow: var(--glow);
 }
 
 .eyebrow {
