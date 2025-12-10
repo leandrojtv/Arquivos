@@ -19,6 +19,7 @@
             <th>Conector</th>
             <th>Tipo</th>
             <th>Modo</th>
+            <th>Agenda</th>
             <th>Status</th>
             <th>Progresso</th>
             <th>Atualizado</th>
@@ -32,6 +33,15 @@
             <td>{{ job.connector }}</td>
             <td>{{ job.extraction_type }}</td>
             <td>{{ job.mode }}</td>
+            <td>
+              {% if job.run_once %}
+              Execução única
+              {% elif schedules.get(job.schedule_id) %}
+              {{ schedules.get(job.schedule_id).name }} · {{ humanize_days(schedules.get(job.schedule_id).days_of_week) }}
+              {% else %}
+              —
+              {% endif %}
+            </td>
             <td>{{ job.status }}</td>
             <td>
               <div class="progress mini"><div class="progress-bar" style="width: {{ job.progress }}%"></div></div>
@@ -47,7 +57,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="8">Nenhum job executado ainda.</td></tr>
+          <tr><td colspan="9">Nenhum job executado ainda.</td></tr>
           {% endfor %}
         </tbody>
       </table>

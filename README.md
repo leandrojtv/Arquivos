@@ -87,6 +87,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 - Importação em massa de bases com mapeamento de colunas, gestor titular obrigatório e substitutos opcionais vinculados pelo nome.
   - Arquivos exportados podem ser reimportados para **atualizar** gestores ou bases existentes com base no nome, evitando duplicidades.
 - Extração guiada de metadados do Teradata com montagem automática da string JDBC, teste de conexão e aplicação direta nas bases.
+- Gerenciador de schedules reutilizáveis (data, hora, dias da semana, intervalo e repetição) para associar a jobs de extração ou execuções únicas.
 - Download de modelos XLSX para cada tipo de importação e exportação dos resultados filtrados (bases e gestores) prontos para reimportar.
 - Relatórios com gráfico de cobertura de gestores, total de gestores cadastrados e distribuição de bases por coordenação e ambiente.
 - Mensagens de feedback em todas as operações.
@@ -141,9 +142,17 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 2. Na etapa **Conexão**, preencha host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`).
 3. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo.
 4. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que executa a consulta `select d.DatabaseName, d.CommentString from DBC.DatabasesV where DBKind='D'`.
-5. Em **Extração**, revise o resumo e clique em **Iniciar extração**. As bases são vinculadas automaticamente ao gestor padrão de metadados.
+5. Em **Agenda**, selecione **Execução única** ou associe um **schedule** existente (criado no menu do usuário) para reaproveitar a programação em outros jobs.
+6. Em **Extração**, revise o resumo e clique em **Iniciar extração**. As bases são vinculadas automaticamente ao gestor padrão de metadados.
 
 > Um gestor padrão (`Gestor Padrão (Metadados)`) é criado automaticamente para garantir o vínculo obrigatório nas extrações diretas. Para cadastros manuais ou importações via arquivo, o usuário continua escolhendo o gestor titular normalmente.
+
+## Gerenciar schedules
+
+1. No menu do usuário (canto superior direito), clique em **Schedules** para abrir o gerenciador.
+2. Preencha **Nome**, data/hora de início, selecione os **dias da semana** e, se desejar, informe um **intervalo em minutos** e marque **Repetir indefinidamente**.
+3. Salve o schedule para reutilizar em diferentes jobs. Você pode editar ou excluir agendas existentes na mesma tela.
+4. Na etapa **Agenda** do fluxo de extração, escolha **Execução única** ou selecione um dos schedules criados para programar execuções recorrentes.
 
 ## Monitorar jobs e logs
 

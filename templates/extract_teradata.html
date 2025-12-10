@@ -15,7 +15,8 @@
   <div class="wizard">
     <div class="wizard-step active">1. Conexão</div>
     <div class="wizard-step">2. Tipo</div>
-    <div class="wizard-step">3. Extração</div>
+    <div class="wizard-step">3. Agenda</div>
+    <div class="wizard-step">4. Extração</div>
   </div>
   <form action="{{ url_for('extract_teradata', step='config') }}" method="post" class="card">
     <div class="grid-two">
@@ -64,7 +65,8 @@
   <div class="wizard">
     <div class="wizard-step done">1. Conexão</div>
     <div class="wizard-step active">2. Tipo</div>
-    <div class="wizard-step">3. Extração</div>
+    <div class="wizard-step">3. Agenda</div>
+    <div class="wizard-step">4. Extração</div>
   </div>
   <form action="{{ url_for('extract_teradata', step='tipos') }}" method="post" class="card">
     <p class="form-helper">Escolha o tipo de execução e o modo. No incremental apenas bases novas ou atualizações são aplicadas; a execução completa limpa as bases vindas do Teradata antes de inserir novamente.</p>
@@ -108,11 +110,59 @@
     </div>
   </form>
 
+  {% elif step == 'agenda' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Conexão</div>
+    <div class="wizard-step done">2. Tipo</div>
+    <div class="wizard-step active">3. Agenda</div>
+    <div class="wizard-step">4. Extração</div>
+  </div>
+  <form action="{{ url_for('extract_teradata', step='agenda') }}" method="post" class="card">
+    <p class="form-helper">Escolha se deseja executar apenas uma vez ou vincular a um schedule existente para reuso em novos jobs.</p>
+    <label class="radio-tile">
+      <input type="radio" name="execution_plan" value="once" {% if bucket.get('run_once', True) %}checked{% endif %} />
+      <div>
+        <strong>Execução única</strong>
+        <p>Roda apenas uma vez sem reaproveitar agenda.</p>
+      </div>
+    </label>
+
+    <div class="card inset">
+      <div class="actions-inline">
+        <label class="radio-tile">
+          <input type="radio" name="execution_plan" value="scheduled" {% if bucket.get('run_once') is sameas false %}checked{% endif %} />
+          <div>
+            <strong>Usar schedule existente</strong>
+            <p>Reaproveite agendas criadas no gerenciador.</p>
+          </div>
+        </label>
+        <a class="button ghost" href="{{ url_for('schedules') }}"><span class="icon">🗓️</span><span>Gerenciar schedules</span></a>
+      </div>
+      <label for="schedule_id">Selecione um schedule</label>
+      <select name="schedule_id" id="schedule_id">
+        <option value="">Escolha uma agenda</option>
+        {% for sched in schedules %}
+        <option value="{{ sched.id }}" {% if bucket.get('schedule_id') == sched.id %}selected{% endif %}>
+          {{ sched.name }} · {{ humanize_days(sched.days_of_week) }} {% if sched.start_time %}- {{ sched.start_time }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% if schedules|length == 0 %}
+      <p class="form-helper">Nenhum schedule criado ainda. Crie um novo para habilitar execuções recorrentes.</p>
+      {% endif %}
+    </div>
+    <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('extract_teradata', step='tipos') }}"><span class="icon">↩</span><span>Voltar</span></a>
+      <button type="submit" class="button"><span class="icon">➡️</span><span>Avançar</span></button>
+    </div>
+  </form>
+
   {% elif step == 'executar' %}
   <div class="wizard">
     <div class="wizard-step done">1. Conexão</div>
     <div class="wizard-step done">2. Tipo</div>
-    <div class="wizard-step active">3. Extração</div>
+    <div class="wizard-step done">3. Agenda</div>
+    <div class="wizard-step active">4. Extração</div>
   </div>
   <div class="card">
     <div class="grid-two">
@@ -122,6 +172,11 @@
           <li><strong>JDBC:</strong> {{ bucket.get('config', {}).get('jdbc_url') or 'Gerado automaticamente' }}</li>
           <li><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</li>
           <li><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</li>
+          {% if selected_schedule %}
+          <li><strong>Agenda:</strong> {{ selected_schedule['name'] }} · {{ humanize_days(selected_schedule['days_of_week']) }}{% if selected_schedule['start_time'] %} às {{ selected_schedule['start_time'] }}{% endif %}</li>
+          {% else %}
+          <li><strong>Agenda:</strong> Execução única</li>
+          {% endif %}
         </ul>
       </div>
       <div>

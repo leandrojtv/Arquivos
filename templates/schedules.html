@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Schedules{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Orquestração</p>
+      <h2>Gerenciar schedules</h2>
+      <p class="subtitle">Crie agendas reutilizáveis para extrações e outras automações futuras.</p>
+    </div>
+    <div class="pill">Schedules</div>
+  </div>
+
+  <div class="grid-two">
+    <form action="{{ url_for('schedules') }}" method="post" class="card">
+      <p class="eyebrow">Novo schedule</p>
+      <label for="name">Nome</label>
+      <input type="text" name="name" id="name" value="{{ edit_schedule and edit_schedule['name'] or '' }}" placeholder="Agendamento diário" />
+
+      <div class="grid-two">
+        <div>
+          <label for="start_date">Data inicial</label>
+          <input type="date" name="start_date" id="start_date" value="{{ edit_schedule and edit_schedule['start_date'] or '' }}" />
+        </div>
+        <div>
+          <label for="start_time">Hora</label>
+          <input type="time" name="start_time" id="start_time" value="{{ edit_schedule and edit_schedule['start_time'] or '' }}" />
+        </div>
+      </div>
+
+      <p class="eyebrow">Dias da semana</p>
+      <div class="chips">
+        {% set chosen = (edit_schedule and (edit_schedule['days_of_week'] or '') or '').split(',') %}
+        {% for code, label in days_options %}
+        <label class="chip-checkbox">
+          <input type="checkbox" name="days_of_week" value="{{ code }}" {% if code in chosen %}checked{% endif %} />
+          <span>{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <label for="interval_minutes">Intervalo (minutos)</label>
+      <input type="number" name="interval_minutes" id="interval_minutes" min="0" step="5" value="{{ edit_schedule and edit_schedule['interval_minutes'] or '' }}" placeholder="60" />
+      <label class="checkbox">
+        <input type="checkbox" name="repeat_forever" {% if edit_schedule and edit_schedule['repeat_forever'] %}checked{% endif %} />
+        <span>Repetir indefinidamente</span>
+      </label>
+
+      {% if edit_schedule %}
+      <input type="hidden" name="schedule_id" value="{{ edit_schedule['id'] }}" />
+      <div class="actions-inline">
+        <a class="button ghost" href="{{ url_for('schedules') }}"><span class="icon">↩</span><span>Cancelar edição</span></a>
+        <button type="submit" class="button"><span class="icon">💾</span><span>Atualizar</span></button>
+      </div>
+      {% else %}
+      <button type="submit" class="button full"><span class="icon">➕</span><span>Criar schedule</span></button>
+      {% endif %}
+    </form>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Agendas</p>
+          <h3>Schedules salvos</h3>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Dias</th>
+              <th>Hora</th>
+              <th>Intervalo</th>
+              <th>Repetição</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sched in schedules %}
+            <tr>
+              <td>{{ sched.name }}</td>
+              <td>{{ sched.days_label }}</td>
+              <td>{{ sched.start_time or '—' }}</td>
+              <td>{{ sched.interval or '—' }} {% if sched.interval %}min{% endif %}</td>
+              <td>{{ 'Indefinido' if sched.repeat_forever else 'Até finalizar' }}</td>
+              <td class="actions-inline">
+                <a class="button ghost" href="{{ url_for('schedules', edit=sched.id) }}"><span class="icon">✏️</span><span>Editar</span></a>
+                <form action="{{ url_for('delete_schedule', schedule_id=sched.id) }}" method="post" style="display:inline">
+                  <button type="submit" class="button ghost"><span class="icon">🗑️</span><span>Excluir</span></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6">Nenhum schedule criado ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

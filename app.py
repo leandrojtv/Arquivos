@@ -47,6 +47,15 @@ DEFAULT_EXTRACTOR_GESTOR = {
     "coordenacao": "Automático",
     "email": "gestor.meta@exemplo.gov",
 }
+DAYS_OF_WEEK = [
+    ("mon", "Segunda"),
+    ("tue", "Terça"),
+    ("wed", "Quarta"),
+    ("thu", "Quinta"),
+    ("fri", "Sexta"),
+    ("sat", "Sábado"),
+    ("sun", "Domingo"),
+]
 
 
 def normalize_wildcard(term: str):
@@ -98,12 +107,28 @@ def init_db():
             password TEXT,
             username TEXT,
             extra_params TEXT,
+            schedule_id INTEGER,
+            run_once INTEGER DEFAULT 1,
             status TEXT NOT NULL DEFAULT 'pending',
             progress INTEGER NOT NULL DEFAULT 0,
             log TEXT,
             error TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            start_date TEXT,
+            start_time TEXT,
+            days_of_week TEXT,
+            interval_minutes INTEGER,
+            repeat_forever INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -223,6 +248,10 @@ def migrate_extraction_jobs():
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN host TEXT")
     if columns and "password" not in names:
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN password TEXT")
+    if columns and "schedule_id" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN schedule_id INTEGER")
+    if columns and "run_once" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN run_once INTEGER DEFAULT 1")
     conn.commit()
     conn.close()
 
@@ -397,12 +426,12 @@ def clear_import_state(flow=None):
         bucket.clear()
 
 
-def create_extraction_job(connector, extraction_type, mode, config):
+def create_extraction_job(connector, extraction_type, mode, config, schedule_id=None, run_once=True):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             connector,
@@ -415,6 +444,8 @@ def create_extraction_job(connector, extraction_type, mode, config):
             config.get("password"),
             config.get("username"),
             config.get("extra_params"),
+            schedule_id,
+            1 if run_once else 0,
         ),
     )
     conn.commit()
@@ -466,6 +497,47 @@ def get_job(job_id):
     job = conn.execute("SELECT * FROM extraction_jobs WHERE id = ?", (job_id,)).fetchone()
     conn.close()
     return job
+
+
+def get_schedules():
+    return query_db("SELECT * FROM schedules ORDER BY name ASC")
+
+
+def get_schedule(schedule_id):
+    rows = query_db("SELECT * FROM schedules WHERE id = ?", (schedule_id,))
+    return rows[0] if rows else None
+
+
+def parse_schedule_form(form):
+    name = form.get("name", "").strip()
+    start_date = form.get("start_date", "").strip() or None
+    start_time = form.get("start_time", "").strip() or None
+    days = form.getlist("days_of_week")
+    days_clean = ",".join(sorted(set(days))) if days else None
+    interval_raw = form.get("interval_minutes", "").strip()
+    interval_minutes = None
+    if interval_raw:
+        try:
+            interval_minutes = int(interval_raw)
+        except ValueError:
+            interval_minutes = None
+    repeat_forever = 1 if form.get("repeat_forever") else 0
+    return {
+        "name": name,
+        "start_date": start_date,
+        "start_time": start_time,
+        "days_of_week": days_clean,
+        "interval_minutes": interval_minutes,
+        "repeat_forever": repeat_forever,
+    }
+
+
+def humanize_days(days_str):
+    if not days_str:
+        return "Todos os dias"
+    codes = set(days_str.split(","))
+    labels = [label for code, label in DAYS_OF_WEEK if code in codes]
+    return ", ".join(labels) if labels else "Dias livres"
 
 
 def login_required(view_func):
@@ -1839,6 +1911,8 @@ def prefill_from_job(job_id, bucket):
     }
     bucket["mode"] = job["mode"] or "incremental"
     bucket["extraction_type"] = job["extraction_type"] or "metadata"
+    bucket["schedule_id"] = job["schedule_id"]
+    bucket["run_once"] = bool(job["run_once"]) if job["run_once"] is not None else True
 
 
 @app.route("/extracao/teradata", methods=["GET", "POST"])
@@ -1894,8 +1968,41 @@ def extract_teradata():
         if request.method == "POST":
             bucket["extraction_type"] = request.form.get("extraction_type", "metadata")
             bucket["mode"] = request.form.get("mode", "incremental")
-            return redirect(url_for("extract_teradata", step="executar"))
+            return redirect(url_for("extract_teradata", step="agenda"))
         return render_template("extract_teradata.html", step="tipos", bucket=bucket)
+
+    if step == "agenda":
+        if not bucket.get("config"):
+            flash("Configure a conexão antes de selecionar o schedule.", "error")
+            return redirect(url_for("extract_teradata"))
+
+        schedules = get_schedules()
+        if request.method == "POST":
+            execution_plan = request.form.get("execution_plan", "once")
+            if execution_plan == "once":
+                bucket["run_once"] = True
+                bucket["schedule_id"] = None
+                return redirect(url_for("extract_teradata", step="executar"))
+
+            schedule_id = request.form.get("schedule_id")
+            try:
+                sid = int(schedule_id) if schedule_id else None
+            except (TypeError, ValueError):
+                sid = None
+            if not sid or not get_schedule(sid):
+                flash("Escolha um schedule válido ou marque execução única.", "error")
+                return redirect(url_for("extract_teradata", step="agenda"))
+            bucket["run_once"] = False
+            bucket["schedule_id"] = sid
+            return redirect(url_for("extract_teradata", step="executar"))
+
+        return render_template(
+            "extract_teradata.html",
+            step="agenda",
+            bucket=bucket,
+            schedules=schedules,
+            humanize_days=humanize_days,
+        )
 
     if step == "executar":
         if not bucket.get("config"):
@@ -1907,13 +2014,30 @@ def extract_teradata():
             extraction_type = bucket.get("extraction_type", "metadata")
             mode = bucket.get("mode", "incremental")
 
-            job_id = create_extraction_job("teradata", extraction_type, mode, config)
+            job_id = create_extraction_job(
+                "teradata",
+                extraction_type,
+                mode,
+                config,
+                schedule_id=bucket.get("schedule_id"),
+                run_once=bucket.get("run_once", True),
+            )
             result = run_teradata_job(config, mode, extraction_type, job_id)
             bucket["result"] = {"job_id": job_id, **result}
             flash("Extração finalizada.", "success" if not result["errors"] else "warning")
             return redirect(url_for("extract_teradata", step="executar"))
 
-        return render_template("extract_teradata.html", step="executar", bucket=bucket)
+        selected_schedule = None
+        if not bucket.get("run_once") and bucket.get("schedule_id"):
+            selected_schedule = get_schedule(bucket["schedule_id"])
+
+        return render_template(
+            "extract_teradata.html",
+            step="executar",
+            bucket=bucket,
+            selected_schedule=selected_schedule,
+            humanize_days=humanize_days,
+        )
 
     if step == "config":
         return render_template("extract_teradata.html", step="config", bucket=bucket)
@@ -1929,11 +2053,104 @@ def settings():
     return render_template("settings.html", users=users)
 
 
+@app.route("/schedules", methods=["GET", "POST"])
+@login_required
+def schedules():
+    edit_id = request.args.get("edit")
+    edit_schedule = None
+    if edit_id:
+        try:
+            edit_schedule = get_schedule(int(edit_id))
+        except ValueError:
+            edit_schedule = None
+
+    if request.method == "POST":
+        data = parse_schedule_form(request.form)
+        if not data["name"]:
+            flash("Informe um nome para o schedule.", "error")
+            return redirect(url_for("schedules"))
+
+        schedule_id = request.form.get("schedule_id")
+        if schedule_id:
+            try:
+                sid = int(schedule_id)
+            except ValueError:
+                sid = None
+            if not sid:
+                flash("Schedule inválido.", "error")
+                return redirect(url_for("schedules"))
+            execute_db(
+                """
+                UPDATE schedules
+                SET name = ?, start_date = ?, start_time = ?, days_of_week = ?, interval_minutes = ?, repeat_forever = ?
+                WHERE id = ?
+                """,
+                (
+                    data["name"],
+                    data["start_date"],
+                    data["start_time"],
+                    data["days_of_week"],
+                    data["interval_minutes"],
+                    data["repeat_forever"],
+                    sid,
+                ),
+            )
+            flash("Schedule atualizado.", "success")
+        else:
+            execute_db(
+                """
+                INSERT INTO schedules (name, start_date, start_time, days_of_week, interval_minutes, repeat_forever)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data["name"],
+                    data["start_date"],
+                    data["start_time"],
+                    data["days_of_week"],
+                    data["interval_minutes"],
+                    data["repeat_forever"],
+                ),
+            )
+            flash("Schedule criado.", "success")
+        return redirect(url_for("schedules"))
+
+    schedules_rows = get_schedules()
+    schedule_cards = []
+    for sched in schedules_rows:
+        schedule_cards.append(
+            {
+                "id": sched["id"],
+                "name": sched["name"],
+                "start_date": sched["start_date"],
+                "start_time": sched["start_time"],
+                "days_label": humanize_days(sched["days_of_week"]),
+                "interval": sched["interval_minutes"],
+                "repeat_forever": bool(sched["repeat_forever"]),
+            }
+        )
+
+    return render_template(
+        "schedules.html",
+        schedules=schedule_cards,
+        days_options=DAYS_OF_WEEK,
+        edit_schedule=edit_schedule,
+    )
+
+
+@app.route("/schedules/<int:schedule_id>/delete", methods=["POST"])
+@login_required
+def delete_schedule(schedule_id):
+    execute_db("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+    flash("Schedule removido.", "success")
+    return redirect(url_for("schedules"))
+
+
 @app.route("/jobs")
 @login_required
 def monitor_jobs():
     jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
-    return render_template("jobs.html", jobs=jobs)
+    schedules = {sched["id"]: sched for sched in get_schedules()}
+    return render_template("jobs.html", jobs=jobs, schedules=schedules, humanize_days=humanize_days)
 
 
 @app.route("/jobs/<int:job_id>/restart", methods=["POST"])
