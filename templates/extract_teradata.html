@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Extração Teradata{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Fluxo em etapas</p>
+      <h2>Teradata · Metadados</h2>
+      <p class="subtitle">Monte a conexão JDBC, teste rapidamente e aplique o catálogo diretamente nas bases com acompanhamento.</p>
+    </div>
+    <div class="pill">Teradata</div>
+  </div>
+
+  {% if step == 'config' %}
+  <div class="wizard">
+    <div class="wizard-step active">1. Conexão</div>
+    <div class="wizard-step">2. Tipo</div>
+    <div class="wizard-step">3. Extração</div>
+  </div>
+  <form action="{{ url_for('extract_teradata', step='config') }}" method="post" class="card">
+    <div class="grid-two">
+      <div>
+        <label for="host">Host / IP</label>
+        <input type="text" name="host" id="host" value="{{ bucket.get('config', {}).get('host','') }}" placeholder="ex.: tera.company.local" />
+      </div>
+      <div>
+        <label for="database_name">Nome do banco</label>
+        <input type="text" name="database_name" id="database_name" value="{{ bucket.get('config', {}).get('database_name','') }}" placeholder="DBC" />
+      </div>
+      <div>
+        <label for="connection_type">Tipo de conexão</label>
+        <select name="connection_type" id="connection_type">
+          <option value="TD2" {% if bucket.get('config', {}).get('connection_type','TD2') == 'TD2' %}selected{% endif %}>TD2</option>
+          <option value="LDAP" {% if bucket.get('config', {}).get('connection_type') == 'LDAP' %}selected{% endif %}>LDAP</option>
+        </select>
+      </div>
+      <div>
+        <label for="extra_params">Parâmetros extras</label>
+        <input type="text" name="extra_params" id="extra_params" value="{{ bucket.get('config', {}).get('extra_params','') }}" placeholder="ex.: DBS_PORT=1025,CHARSET=UTF8" />
+      </div>
+    </div>
+    <label for="jdbc_url">String JDBC (opcional)</label>
+    <input type="text" name="jdbc_url" id="jdbc_url" value="{{ bucket.get('config', {}).get('jdbc_url','') }}" placeholder="jdbc:teradata://host/DATABASE=DBC,LOGMECH=TD2" />
+    <p class="form-helper">Se deixar vazio, o JDBC será montado automaticamente com os campos acima.</p>
+
+    <div class="grid-two">
+      <div>
+        <label for="username">Usuário</label>
+        <input type="text" name="username" id="username" value="{{ bucket.get('config', {}).get('username','') }}" />
+      </div>
+      <div>
+        <label for="password">Senha</label>
+        <input type="password" name="password" id="password" value="{{ bucket.get('config', {}).get('password','') }}" />
+      </div>
+    </div>
+
+    <div class="actions-inline">
+      <button type="submit" class="button ghost" name="action" value="test"><span class="icon">🧪</span><span>Testar conexão</span></button>
+      <button type="submit" class="button"><span class="icon">➡️</span><span>Avançar</span></button>
+    </div>
+  </form>
+
+  {% elif step == 'tipos' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Conexão</div>
+    <div class="wizard-step active">2. Tipo</div>
+    <div class="wizard-step">3. Extração</div>
+  </div>
+  <form action="{{ url_for('extract_teradata', step='tipos') }}" method="post" class="card">
+    <p class="form-helper">Escolha o tipo de execução e o modo. No incremental apenas bases novas ou atualizações são aplicadas; a execução completa limpa as bases vindas do Teradata antes de inserir novamente.</p>
+    <div class="grid-two">
+      <div class="card inset">
+        <label class="radio-tile">
+          <input type="radio" name="extraction_type" value="metadata" checked />
+          <div>
+            <strong>Metadados</strong>
+            <p>Busca DatabaseName e CommentString conforme a consulta informada.</p>
+          </div>
+        </label>
+        <label class="radio-tile disabled">
+          <input type="radio" disabled />
+          <div>
+            <strong>Profiling</strong>
+            <p>Em breve para estatísticas e qualidade.</p>
+          </div>
+        </label>
+      </div>
+      <div class="card inset">
+        <label class="radio-tile">
+          <input type="radio" name="mode" value="incremental" {% if bucket.get('mode','incremental') == 'incremental' %}checked{% endif %} />
+          <div>
+            <strong>Incremental</strong>
+            <p>Inclui novas bases e atualiza descrições já importadas.</p>
+          </div>
+        </label>
+        <label class="radio-tile">
+          <input type="radio" name="mode" value="full" {% if bucket.get('mode') == 'full' %}checked{% endif %} />
+          <div>
+            <strong>Completa</strong>
+            <p>Remove bases trazidas de extrações anteriores do Teradata e reaplica tudo.</p>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><span class="icon">↩</span><span>Voltar</span></a>
+      <button type="submit" class="button"><span class="icon">➡️</span><span>Continuar</span></button>
+    </div>
+  </form>
+
+  {% elif step == 'executar' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Conexão</div>
+    <div class="wizard-step done">2. Tipo</div>
+    <div class="wizard-step active">3. Extração</div>
+  </div>
+  <div class="card">
+    <div class="grid-two">
+      <div>
+        <p class="eyebrow">Resumo</p>
+        <ul class="summary-list">
+          <li><strong>JDBC:</strong> {{ bucket.get('config', {}).get('jdbc_url') or 'Gerado automaticamente' }}</li>
+          <li><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</li>
+          <li><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</li>
+        </ul>
+      </div>
+      <div>
+        <p class="eyebrow">Gestor padrão</p>
+        <p class="subtitle">As bases extraídas são atribuídas ao gestor padrão de metadados para manter o vínculo obrigatório.</p>
+      </div>
+    </div>
+    <form action="{{ url_for('extract_teradata', step='executar') }}" method="post" class="actions-inline">
+      <button type="submit" class="button"><span class="icon">🚀</span><span>Iniciar extração</span></button>
+      <a class="button ghost" href="{{ url_for('extraction_menu') }}"><span class="icon">🏁</span><span>Voltar</span></a>
+    </form>
+
+    {% if bucket.get('result') %}
+    {% set result = bucket.get('result') %}
+    <div class="progress">
+      <div class="progress-bar" style="width: {{ result.total and 100 or 0 }}%"></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{ result.imported }}</strong><span>Aplicadas</span></div>
+      <div class="stat"><strong>{{ result.total }}</strong><span>Recebidas</span></div>
+    </div>
+    {% if result.note %}
+    <div class="alert info">{{ result.note }}</div>
+    {% endif %}
+    {% if result.errors and result.errors|length %}
+    <div class="alert error">
+      <p>Ocorreram avisos:</p>
+      <ul>
+        {% for err in result.errors %}<li>{{ err }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="alert success">Extração concluída.</div>
+    {% endif %}
+    <div class="actions-inline">
+      <a class="button" href="{{ url_for('monitor_jobs') }}"><span class="icon">📊</span><span>Acompanhar jobs</span></a>
+      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><span class="icon">🔁</span><span>Novo fluxo</span></a>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

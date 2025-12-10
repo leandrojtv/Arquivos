@@ -55,9 +55,11 @@ A aplicação ficará disponível em `http://localhost:8000`.
 - Edição e exclusão tanto de gestores (quando não vinculados) quanto de bases.
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
 - Importação em massa de bases com mapeamento de colunas, gestor titular obrigatório e substitutos opcionais vinculados pelo nome.
+- Extração guiada de metadados do Teradata com montagem automática da string JDBC, teste de conexão e aplicação direta nas bases.
 - Mensagens de feedback em todas as operações.
 - Menu do usuário no topo para acessar **Configurações**, logout e abrir a modal **Novo** para escolher entre cadastrar gestor ou base.
 - Página de gestão de usuários para criar, redefinir senha ou remover acessos (exceto o administrador padrão).
+- Monitor de jobs para reiniciar execuções, editar configurações e baixar logs das extrações.
 
 ## Gestão de usuários
 
@@ -80,3 +82,19 @@ A aplicação ficará disponível em `http://localhost:8000`.
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Gestor`) e, se desejar, informe também `Ambiente`, `Descrição` e as colunas de **1º** e **2º substitutos**.
 4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos (quando informados), mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.
+
+## Extração de metadados (Teradata)
+
+1. Abra o menu **Extração** e escolha o conector **Teradata**.
+2. Na etapa **Conexão**, preencha host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`).
+3. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo.
+4. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que executa a consulta `select d.DatabaseName, d.CommentString from DBC.DatabasesV where DBKind='D'`.
+5. Em **Extração**, revise o resumo e clique em **Iniciar extração**. As bases são vinculadas automaticamente ao gestor padrão de metadados.
+
+> Um gestor padrão (`Gestor Padrão (Metadados)`) é criado automaticamente para garantir o vínculo obrigatório nas extrações diretas. Para cadastros manuais ou importações via arquivo, o usuário continua escolhendo o gestor titular normalmente.
+
+## Monitorar jobs e logs
+
+- No menu suspenso do usuário, acesse **Jobs de extração** para ver histórico, progresso e status de cada execução.
+- Use **Restart** para reprocessar um job com a mesma configuração ou **Editar** para reabrir o fluxo de extração com os dados preenchidos e ajustar antes de reiniciar.
+- Clique em **Logs** para baixar o log de execução e investigar eventuais falhas.

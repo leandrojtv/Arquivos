@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Monitor de jobs{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Execuções</p>
+      <h2>Monitor de extrações</h2>
+      <p class="subtitle">Acompanhe o histórico de jobs, baixe logs e reinicie ou reconfigure quando necessário.</p>
+    </div>
+    <div class="pill">Jobs</div>
+  </div>
+  <div class="card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Conector</th>
+            <th>Tipo</th>
+            <th>Modo</th>
+            <th>Status</th>
+            <th>Progresso</th>
+            <th>Atualizado</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td>#{{ job.id }}</td>
+            <td>{{ job.connector }}</td>
+            <td>{{ job.extraction_type }}</td>
+            <td>{{ job.mode }}</td>
+            <td>{{ job.status }}</td>
+            <td>
+              <div class="progress mini"><div class="progress-bar" style="width: {{ job.progress }}%"></div></div>
+              <small>{{ job.progress }}%</small>
+            </td>
+            <td>{{ job.updated_at }}</td>
+            <td class="actions-inline">
+              <form action="{{ url_for('restart_job', job_id=job.id) }}" method="post" style="display:inline">
+                <button type="submit" class="button ghost"><span class="icon">🔁</span><span>Restart</span></button>
+              </form>
+              <a class="button" href="{{ url_for('edit_job', job_id=job.id) }}"><span class="icon">✏️</span><span>Editar</span></a>
+              <a class="button ghost" href="{{ url_for('download_logs', job_id=job.id) }}"><span class="icon">📥</span><span>Logs</span></a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8">Nenhum job executado ainda.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

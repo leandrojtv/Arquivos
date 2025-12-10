@@ -28,6 +28,7 @@
           </div>
           <div class="user-dropdown">
             <a href="{{ url_for('settings') }}">Configurações</a>
+            <a href="{{ url_for('monitor_jobs') }}">Jobs de extração</a>
             <a href="{{ url_for('logout') }}">Sair</a>
           </div>
         </div>
@@ -44,6 +45,7 @@
           <a class="button nav-button ghost" href="{{ url_for('list_gestors') }}"><span class="icon">👥</span><span>Gestores</span></a>
           <a class="button nav-button ghost" href="{{ url_for('search') }}"><span class="icon">🔎</span><span>Pesquisar</span></a>
           <a class="button nav-button ghost" href="{{ url_for('import_records') }}"><span class="icon">⬆️</span><span>Importar</span></a>
+          <a class="button nav-button ghost" href="{{ url_for('extraction_menu') }}"><span class="icon">🛰️</span><span>Extração</span></a>
         </div>
         {% else %}
         <a href="{{ url_for('login') }}" class="pill">Login</a>

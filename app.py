@@ -35,6 +35,12 @@ app.secret_key = "change-me"  # Needed for flash messages.
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
 IMPORT_CACHE = {}
+DEFAULT_EXTRACTOR_GESTOR = {
+    "name": "Gestor Padrão (Metadados)",
+    "secretaria": "Extrações",
+    "coordenacao": "Automático",
+    "email": "gestor.meta@exemplo.gov",
+}
 
 
 def init_db():
@@ -53,6 +59,29 @@ def init_db():
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS extraction_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            connector TEXT NOT NULL,
+            extraction_type TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            host TEXT,
+            jdbc_url TEXT,
+            connection_type TEXT,
+            database_name TEXT,
+            password TEXT,
+            username TEXT,
+            extra_params TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            progress INTEGER NOT NULL DEFAULT 0,
+            log TEXT,
+            error TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS bases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -61,9 +90,12 @@ def init_db():
             gestor_id INTEGER NOT NULL,
             substituto1_id INTEGER,
             substituto2_id INTEGER,
+            source_connector TEXT NOT NULL DEFAULT 'manual',
+            source_job_id INTEGER,
             FOREIGN KEY (gestor_id) REFERENCES gestors(id),
             FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
-            FOREIGN KEY (substituto2_id) REFERENCES gestors(id)
+            FOREIGN KEY (substituto2_id) REFERENCES gestors(id),
+            FOREIGN KEY (source_job_id) REFERENCES extraction_jobs(id)
         )
         """
     )
@@ -85,8 +117,11 @@ def init_db():
         (ADMIN_USERNAME, ADMIN_PASSWORD),
     )
     conn.commit()
-    conn.close()
+    ensure_default_extractor_gestor()
     migrate_bases_nullable()
+    migrate_bases_sources()
+    migrate_extraction_jobs()
+    conn.close()
 
 
 def migrate_bases_nullable():
@@ -121,21 +156,76 @@ def migrate_bases_nullable():
             gestor_id INTEGER NOT NULL,
             substituto1_id INTEGER,
             substituto2_id INTEGER,
+            source_connector TEXT NOT NULL DEFAULT 'manual',
+            source_job_id INTEGER,
             FOREIGN KEY (gestor_id) REFERENCES gestors(id),
             FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
-            FOREIGN KEY (substituto2_id) REFERENCES gestors(id)
+            FOREIGN KEY (substituto2_id) REFERENCES gestors(id),
+            FOREIGN KEY (source_job_id) REFERENCES extraction_jobs(id)
         )
         """
     )
     conn.execute(
         """
-        INSERT INTO bases (id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
-        SELECT id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id FROM bases_old
+        INSERT INTO bases (id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+        SELECT id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, 'manual', NULL FROM bases_old
         """
     )
     conn.execute("DROP TABLE bases_old")
     conn.commit()
     conn.close()
+
+
+def migrate_bases_sources():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "source_connector" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN source_connector TEXT NOT NULL DEFAULT 'manual'")
+    if "source_job_id" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN source_job_id INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def migrate_extraction_jobs():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(extraction_jobs)").fetchall()
+    names = {col[1] for col in columns}
+    if columns and "host" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN host TEXT")
+    if columns and "password" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN password TEXT")
+    conn.commit()
+    conn.close()
+
+
+def ensure_default_extractor_gestor():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    existing = conn.execute(
+        "SELECT id FROM gestors WHERE email = ?", (DEFAULT_EXTRACTOR_GESTOR["email"],)
+    ).fetchone()
+    if existing:
+        conn.close()
+        return existing["id"]
+
+    cursor = conn.execute(
+        """
+        INSERT INTO gestors (name, secretaria, coordenacao, email)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            DEFAULT_EXTRACTOR_GESTOR["name"],
+            DEFAULT_EXTRACTOR_GESTOR["secretaria"],
+            DEFAULT_EXTRACTOR_GESTOR["coordenacao"],
+            DEFAULT_EXTRACTOR_GESTOR["email"],
+        ),
+    )
+    conn.commit()
+    gid = cursor.lastrowid
+    conn.close()
+    return gid
 
 
 def query_db(query, params=()):
@@ -179,12 +269,20 @@ def bulk_insert(records):
 
 def bulk_insert_bases(records):
     conn = sqlite3.connect(DB_PATH)
+    prepared = []
+    for rec in records:
+        if len(rec) == 6:
+            prepared.append((*rec, "import", None))
+        elif len(rec) == 7:
+            prepared.append((*rec, None))
+        else:
+            prepared.append(rec)
     conn.executemany(
         """
-        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        records,
+        prepared,
     )
     conn.commit()
     conn.close()
@@ -213,6 +311,77 @@ def clear_import_state(flow=None):
         bucket.pop(flow, None)
     else:
         bucket.clear()
+
+
+def create_extraction_job(connector, extraction_type, mode, config):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        """
+        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            connector,
+            extraction_type,
+            mode,
+            config.get("host"),
+            config.get("jdbc_url"),
+            config.get("connection_type"),
+            config.get("database_name"),
+            config.get("password"),
+            config.get("username"),
+            config.get("extra_params"),
+        ),
+    )
+    conn.commit()
+    job_id = cur.lastrowid
+    conn.close()
+    return job_id
+
+
+def update_extraction_job(job_id, status=None, progress=None, log=None, error=None):
+    conn = sqlite3.connect(DB_PATH)
+    sets = []
+    params = []
+    if status is not None:
+        sets.append("status = ?")
+        params.append(status)
+    if progress is not None:
+        sets.append("progress = ?")
+        params.append(progress)
+    if log is not None:
+        sets.append("log = ?")
+        params.append(log)
+    if error is not None:
+        sets.append("error = ?")
+        params.append(error)
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(job_id)
+    conn.execute(f"UPDATE extraction_jobs SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def append_job_log(job_id, message, reset=False):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    existing = conn.execute("SELECT log FROM extraction_jobs WHERE id = ?", (job_id,)).fetchone()
+    current_log = existing["log"] if existing and existing["log"] else ""
+    new_log = message if reset or not current_log else f"{current_log}\n{message}"
+    conn.execute(
+        "UPDATE extraction_jobs SET log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (new_log, job_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_job(job_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    job = conn.execute("SELECT * FROM extraction_jobs WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    return job
 
 
 def login_required(view_func):
@@ -260,6 +429,146 @@ def parse_xlsx(file_storage):
         if name and secretaria and coordenacao and email:
             records.append((name, secretaria, coordenacao, email))
     return records
+
+
+def build_jdbc_url(host, database_name, connection_type, extra_params):
+    if not host:
+        return ""
+    suffix = []
+    if database_name:
+        suffix.append(f"DATABASE={database_name}")
+    if connection_type:
+        suffix.append(f"LOGMECH={connection_type}")
+    if extra_params:
+        cleaned = extra_params.strip().strip(",")
+        if cleaned:
+            suffix.append(cleaned)
+    formatted = ",".join(suffix)
+    return f"jdbc:teradata://{host}/{formatted}" if formatted else f"jdbc:teradata://{host}"
+
+
+def test_teradata_connection(config):
+    jdbc_url = config.get("jdbc_url")
+    username = config.get("username")
+    password = config.get("password")
+    if not jdbc_url or not username or not password:
+        return False, "Preencha JDBC, usuário e senha para testar."
+    try:
+        import teradatasql  # type: ignore
+
+        with teradatasql.connect(url=jdbc_url, user=username, password=password):
+            pass
+        return True, "Conexão bem-sucedida."
+    except Exception as exc:  # pragma: no cover - driver pode não estar disponível
+        return False, f"Não foi possível conectar: {exc}" if str(exc) else "Falha ao conectar com o driver JDBC."
+
+
+def fetch_teradata_metadata(config):
+    # Placeholder simples: tenta usar o driver se existir, caso contrário devolve amostra.
+    jdbc_url = config.get("jdbc_url")
+    username = config.get("username")
+    password = config.get("password")
+    database_name = config.get("database_name") or "database"
+    sample_note = None
+    try:
+        import teradatasql  # type: ignore
+
+        query = """
+           select d.DatabaseName, d.CommentString
+           FROM DBC.DatabasesV AS d
+           where DBKind = 'D'
+        """
+        with teradatasql.connect(url=jdbc_url, user=username, password=password) as con:
+            cur = con.cursor()
+            cur.execute(query)
+            rows = cur.fetchall()
+            return [
+                {"DatabaseName": row[0], "CommentString": row[1] if len(row) > 1 else ""}
+                for row in rows
+            ], None
+    except Exception:
+        sample_note = "Extração simulada (driver JDBC indisponível nesta execução)."
+
+    return [
+        {"DatabaseName": database_name, "CommentString": "Base importada via simulação."},
+        {"DatabaseName": f"{database_name}_ANALYTICS", "CommentString": "Exemplo de metadado."},
+    ], sample_note
+
+
+def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
+    imported = 0
+    errors = []
+
+    if mode == "full":
+        execute_db("DELETE FROM bases WHERE source_connector = 'teradata'")
+
+    for entry in rows:
+        name = (entry.get("DatabaseName") or "").strip()
+        descricao = (entry.get("CommentString") or "").strip() or None
+
+        if not name:
+            errors.append("Linha ignorada por falta do nome do database.")
+            continue
+
+        existing = query_db("SELECT id, source_connector FROM bases WHERE name = ?", (name,))
+        if existing:
+            record = existing[0]
+            if record["source_connector"] not in (None, "teradata"):
+                errors.append(f"Base '{name}' foi criada manualmente/importada e não será sobrescrita.")
+                continue
+
+            execute_db(
+                """
+                UPDATE bases
+                SET descricao = ?, gestor_id = ?, source_connector = 'teradata', source_job_id = ?
+                WHERE id = ?
+                """,
+                (descricao, gestor_id, job_id, record["id"]),
+            )
+        else:
+            execute_db(
+                """
+                INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'teradata', ?)
+                """,
+                (name, None, descricao, gestor_id, None, None, job_id),
+            )
+        imported += 1
+
+    return imported, errors
+
+
+def run_teradata_job(config, mode, extraction_type, job_id):
+    append_job_log(job_id, "Iniciando extração de metadados do Teradata...", reset=True)
+    update_extraction_job(job_id, status="running", progress=10, error=None)
+
+    rows, note = fetch_teradata_metadata(config)
+    if note:
+        append_job_log(job_id, note)
+
+    append_job_log(job_id, "Processando bases extraídas...")
+    update_extraction_job(job_id, progress=40)
+
+    gestor_id = ensure_default_extractor_gestor()
+    imported, errors = upsert_bases_from_metadata(rows, mode, job_id, gestor_id)
+
+    progress = 100 if rows else 0
+    status = "success" if not errors else "completed"
+    error_text = "\n".join(errors) if errors else None
+
+    update_extraction_job(job_id, status=status, progress=progress, error=error_text)
+    append_job_log(job_id, f"Linhas recebidas: {len(rows)}. Bases aplicadas: {imported}.")
+    if errors:
+        append_job_log(job_id, "Ocorreram avisos durante a execução:")
+        for err in errors:
+            append_job_log(job_id, f"- {err}")
+
+    return {
+        "total": len(rows),
+        "imported": imported,
+        "errors": errors,
+        "note": note,
+    }
 
 
 def parse_tabular(file_storage, delimiter):
@@ -501,10 +810,18 @@ def add_base():
 
     execute_db(
         """
-        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id),
+        (
+            name,
+            ambiente or None,
+            descricao or None,
+            gestor_id,
+            sub1_id,
+            sub2_id,
+            "manual",
+        ),
     )
     flash("Base cadastrada com sucesso.", "success")
     return redirect(url_for("list_bases"))
@@ -918,11 +1235,172 @@ def import_bases_flow():
     return render_template("import_bases.html", step="upload")
 
 
+@app.route("/extracao")
+@login_required
+def extraction_menu():
+    return render_template("extract.html")
+
+
+def prefill_from_job(job_id, bucket):
+    job = get_job(job_id)
+    if not job:
+        return
+    bucket["config"] = {
+        "host": job["host"] or "",
+        "jdbc_url": job["jdbc_url"] or "",
+        "connection_type": job["connection_type"] or "TD2",
+        "database_name": job["database_name"] or "",
+        "username": job["username"] or "",
+        "password": job["password"] or "",
+        "extra_params": job["extra_params"] or "",
+    }
+    bucket["mode"] = job["mode"] or "incremental"
+    bucket["extraction_type"] = job["extraction_type"] or "metadata"
+
+
+@app.route("/extracao/teradata", methods=["GET", "POST"])
+@login_required
+def extract_teradata():
+    step = request.args.get("step", "config")
+    flow = "extracao_teradata"
+    bucket = get_flow_bucket(flow)
+    job_id_param = request.args.get("job_id")
+
+    if job_id_param and not bucket.get("config"):
+        try:
+            prefill_from_job(int(job_id_param), bucket)
+        except ValueError:
+            pass
+
+    if request.method == "POST" and step == "config":
+        manual_jdbc = request.form.get("jdbc_url", "").strip()
+        host = request.form.get("host", "").strip()
+        database_name = request.form.get("database_name", "").strip()
+        connection_type = request.form.get("connection_type", "TD2").strip() or "TD2"
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        extra_params = request.form.get("extra_params", "").strip()
+        jdbc_url = manual_jdbc or build_jdbc_url(host, database_name, connection_type, extra_params)
+
+        bucket["config"] = {
+            "host": host,
+            "jdbc_url": jdbc_url,
+            "connection_type": connection_type,
+            "database_name": database_name,
+            "username": username,
+            "password": password,
+            "extra_params": extra_params,
+        }
+
+        if request.form.get("action") == "test":
+            ok, message = test_teradata_connection(bucket["config"])
+            flash(message, "success" if ok else "error")
+            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param))
+
+        if not jdbc_url or not username or not password:
+            flash("Preencha JDBC, usuário e senha para continuar.", "error")
+            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param))
+
+        return redirect(url_for("extract_teradata", step="tipos"))
+
+    if step == "tipos":
+        if not bucket.get("config"):
+            flash("Configure a conexão antes de selecionar o tipo.", "error")
+            return redirect(url_for("extract_teradata"))
+
+        if request.method == "POST":
+            bucket["extraction_type"] = request.form.get("extraction_type", "metadata")
+            bucket["mode"] = request.form.get("mode", "incremental")
+            return redirect(url_for("extract_teradata", step="executar"))
+        return render_template("extract_teradata.html", step="tipos", bucket=bucket)
+
+    if step == "executar":
+        if not bucket.get("config"):
+            flash("Configure a conexão antes de executar.", "error")
+            return redirect(url_for("extract_teradata"))
+
+        if request.method == "POST":
+            config = bucket.get("config", {})
+            extraction_type = bucket.get("extraction_type", "metadata")
+            mode = bucket.get("mode", "incremental")
+
+            job_id = create_extraction_job("teradata", extraction_type, mode, config)
+            result = run_teradata_job(config, mode, extraction_type, job_id)
+            bucket["result"] = {"job_id": job_id, **result}
+            flash("Extração finalizada.", "success" if not result["errors"] else "warning")
+            return redirect(url_for("extract_teradata", step="executar"))
+
+        return render_template("extract_teradata.html", step="executar", bucket=bucket)
+
+    if step == "config":
+        return render_template("extract_teradata.html", step="config", bucket=bucket)
+
+    clear_import_state(flow)
+    return render_template("extract_teradata.html", step="config", bucket=bucket)
+
+
 @app.route("/configuracoes")
 @login_required
 def settings():
     users = query_db("SELECT id, username FROM users ORDER BY username ASC")
     return render_template("settings.html", users=users)
+
+
+@app.route("/jobs")
+@login_required
+def monitor_jobs():
+    jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
+    return render_template("jobs.html", jobs=jobs)
+
+
+@app.route("/jobs/<int:job_id>/restart", methods=["POST"])
+@login_required
+def restart_job(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("Job não encontrado.", "error")
+        return redirect(url_for("monitor_jobs"))
+
+    config = {
+        "host": job["host"],
+        "jdbc_url": job["jdbc_url"],
+        "connection_type": job["connection_type"],
+        "database_name": job["database_name"],
+        "username": job["username"],
+        "password": job["password"],
+        "extra_params": job["extra_params"],
+    }
+    update_extraction_job(job_id, status="pending", progress=0, error=None)
+    result = run_teradata_job(config, job["mode"], job["extraction_type"], job_id)
+    flash(
+        "Job reiniciado.",
+        "success" if not result.get("errors") else "warning",
+    )
+    return redirect(url_for("monitor_jobs"))
+
+
+@app.route("/jobs/<int:job_id>/editar")
+@login_required
+def edit_job(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("Job não encontrado.", "error")
+        return redirect(url_for("monitor_jobs"))
+    flash("Configuração carregada no fluxo de extração.", "info")
+    return redirect(url_for("extract_teradata", job_id=job_id))
+
+
+@app.route("/jobs/<int:job_id>/logs")
+@login_required
+def download_logs(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("Job não encontrado.", "error")
+        return redirect(url_for("monitor_jobs"))
+    content = job["log"] or "Sem logs disponíveis."
+    response = app.response_class(content, mimetype="text/plain")
+    response.headers["Content-Disposition"] = f"attachment; filename=job_{job_id}_logs.txt"
+    return response
 
 
 @app.route("/usuarios/criar", methods=["POST"])

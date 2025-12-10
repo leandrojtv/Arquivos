@@ -380,6 +380,12 @@ table td.compact {
   cursor: not-allowed;
 }
 
+.action-card.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.3);
+}
+
 .icon-circle {
   width: 42px;
   height: 42px;
@@ -420,6 +426,28 @@ table td.compact {
   background: rgba(99, 255, 191, 0.08);
 }
 
+.radio-tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 0.75rem;
+}
+
+.radio-tile input {
+  width: 18px;
+  height: 18px;
+}
+
+.radio-tile.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .table-scroll {
   overflow-x: auto;
   margin: 1rem 0;
@@ -458,6 +486,11 @@ table td.compact {
   transition: width 0.4s ease;
 }
 
+.progress.mini {
+  height: 8px;
+  margin-bottom: 0.2rem;
+}
+
 .stats {
   display: flex;
   gap: 1rem;
@@ -470,6 +503,18 @@ table td.compact {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 0.75rem;
+}
+
+.summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.summary-list li strong {
+  color: #fff;
 }
 
 .stat strong {

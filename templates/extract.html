@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Extração de metadados{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Pipelines</p>
+      <h2>Extração de metadados</h2>
+      <p class="subtitle">Configure conectores e dispare fluxos em etapas para preencher as bases direto da fonte.</p>
+    </div>
+    <div class="pill">Nova</div>
+  </div>
+  <div class="grid-two">
+    <a class="card action-card" href="{{ url_for('extract_teradata') }}">
+      <div class="icon-circle">🛰️</div>
+      <div>
+        <p class="eyebrow">Teradata</p>
+        <h3>Extrair metadados</h3>
+        <p>Fluxo guiado para montar o JDBC, testar conexão e aplicar o catálogo diretamente nas bases.</p>
+      </div>
+      <span class="pill">Metadados</span>
+    </a>
+    <div class="card action-card disabled">
+      <div class="icon-circle">🔌</div>
+      <div>
+        <p class="eyebrow">Em breve</p>
+        <h3>Outros conectores</h3>
+        <p>Reservado para futuros bancos e ferramentas de profiling.</p>
+      </div>
+      <span class="pill">Bloqueado</span>
+    </div>
+  </div>
+</section>
+{% endblock %}
