@@ -96,7 +96,10 @@
             <h2>{% if results %}Encontramos {{ results|length }} resultado(s){% else %}Nada para exibir ainda{% endif %}</h2>
             <p class="subtitle">{% if not query and not filters.gestor and not filters.base and not filters.descricao and not filters.ambiente and not filters.fonte %}Digite um termo ou defina filtros para começar.{% elif results|length == 0 %}Tente ajustar a busca ou filtros para localizar cadastros correspondentes.{% else %}Use os filtros ao lado para refinar ainda mais.{% endif %}</p>
           </div>
-          <a class="link" href="{{ url_for('new_base_form') }}">Adicionar base</a>
+          <div class="actions-inline">
+            <a class="button secondary compact" href="{{ url_for('export_bases_search', q=query, gestor=filters.gestor, base=filters.base, ambiente=filters.ambiente, fonte=filters.fonte, descricao=filters.descricao) }}"><span class="icon">📤</span><span>Exportar resultados</span></a>
+            <a class="link" href="{{ url_for('new_base_form') }}">Adicionar base</a>
+          </div>
         </div>
         {% if results %}
           <table>

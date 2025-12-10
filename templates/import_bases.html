@@ -26,6 +26,7 @@
     <p class="form-helper">Usado apenas em CSV. Para XLSX é ignorado.</p>
 
     <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('download_bases_template') }}"><span class="icon">📥</span><span>Baixar modelo XLSX</span></a>
       <button type="submit" class="button"><span class="icon">⬆️</span><span>Continuar</span></button>
       <a class="button ghost" href="{{ url_for('import_records') }}"><span class="icon">↩</span><span>Voltar</span></a>
     </div>

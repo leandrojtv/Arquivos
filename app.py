@@ -18,7 +18,7 @@ from flask import (
     session,
     url_for,
 )
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -666,6 +666,24 @@ def parse_tabular(file_storage, delimiter):
     raise ValueError("Formato não suportado")
 
 
+def build_xlsx_response(headers, rows, filename):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(headers)
+    for row in rows:
+        ws.append(row)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = app.response_class(
+        output.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
+
+
 @app.route("/")
 @login_required
 def landing():
@@ -777,6 +795,16 @@ def list_gestors():
     search_term = request.args.get("q", "").strip()
     gestors = get_gestors(search_term)
     return render_template("gestors.html", gestors=gestors, query=search_term)
+
+
+@app.route("/gestores/exportar")
+@login_required
+def export_gestors():
+    search_term = request.args.get("q", "").strip()
+    gestors = get_gestors(search_term)
+    headers = ["Nome", "Secretaria", "Coordenação", "E-mail"]
+    rows = [[g["name"], g["secretaria"], g["coordenacao"], g["email"]] for g in gestors]
+    return build_xlsx_response(headers, rows, "gestores_export.xlsx")
 
 
 @app.route("/gestores/<int:gestor_id>")
@@ -1058,6 +1086,45 @@ def update_base(base_id):
     return redirect(url_for("list_bases"))
 
 
+def get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao):
+    conditions = []
+    params = []
+
+    if term:
+        like_term = f"%{term}%"
+        conditions.append(
+            "(b.name LIKE ? OR COALESCE(b.descricao, '') LIKE ? OR COALESCE(b.ambiente, '') LIKE ? OR COALESCE(g.name, '') LIKE ?)"
+        )
+        params.extend([like_term, like_term, like_term, like_term])
+    if gestor:
+        conditions.append("g.name LIKE ?")
+        params.append(f"%{gestor}%")
+    if base_nome:
+        conditions.append("b.name LIKE ?")
+        params.append(f"%{base_nome}%")
+    if descricao:
+        conditions.append("COALESCE(b.descricao, '') LIKE ?")
+        params.append(f"%{descricao}%")
+    if ambiente:
+        conditions.append("b.ambiente = ?")
+        params.append(ambiente)
+    if fonte:
+        conditions.append("b.source_connector = ?")
+        params.append(fonte)
+
+    query = """
+        SELECT b.*, g.name as gestor_name, s1.name as sub1_name, s2.name as sub2_name
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        LEFT JOIN gestors s1 ON s1.id = b.substituto1_id
+        LEFT JOIN gestors s2 ON s2.id = b.substituto2_id
+    """
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY b.id DESC"
+    return query_db(query, tuple(params))
+
+
 @app.route("/bases/<int:base_id>/remover", methods=["POST"])
 @login_required
 def delete_base(base_id):
@@ -1078,42 +1145,7 @@ def search():
     descricao = request.args.get("descricao", "").strip()
 
     should_search = any([term, gestor, base_nome, ambiente, fonte, descricao])
-    results = []
-
-    if should_search and tipo == "bases":
-        conditions = []
-        params = []
-        if term:
-            like_term = f"%{term}%"
-            conditions.append(
-                "(b.name LIKE ? OR COALESCE(b.descricao, '') LIKE ? OR COALESCE(b.ambiente, '') LIKE ? OR COALESCE(g.name, '') LIKE ?)"
-            )
-            params.extend([like_term, like_term, like_term, like_term])
-        if gestor:
-            conditions.append("g.name LIKE ?")
-            params.append(f"%{gestor}%")
-        if base_nome:
-            conditions.append("b.name LIKE ?")
-            params.append(f"%{base_nome}%")
-        if descricao:
-            conditions.append("COALESCE(b.descricao, '') LIKE ?")
-            params.append(f"%{descricao}%")
-        if ambiente:
-            conditions.append("b.ambiente = ?")
-            params.append(ambiente)
-        if fonte:
-            conditions.append("b.source_connector = ?")
-            params.append(fonte)
-
-        query = """
-            SELECT b.*, g.name as gestor_name
-            FROM bases b
-            LEFT JOIN gestors g ON g.id = b.gestor_id
-        """
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY b.id DESC"
-        results = query_db(query, tuple(params))
+    results = get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao) if (should_search and tipo == "bases") else []
 
     ambientes = query_db(
         "SELECT DISTINCT ambiente FROM bases WHERE ambiente IS NOT NULL AND ambiente != '' ORDER BY ambiente"
@@ -1172,10 +1204,76 @@ def search_suggestions():
     return jsonify({"suggestions": suggestions})
 
 
+@app.route("/buscar/exportar")
+@login_required
+def export_bases_search():
+    term = request.args.get("q", "").strip()
+    gestor = request.args.get("gestor", "").strip()
+    base_nome = request.args.get("base", "").strip()
+    ambiente = request.args.get("ambiente", "").strip()
+    fonte = request.args.get("fonte", "").strip()
+    descricao = request.args.get("descricao", "").strip()
+
+    results = get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao)
+    headers = [
+        "Base",
+        "Ambiente",
+        "Descrição",
+        "Gestor titular",
+        "1º substituto",
+        "2º substituto",
+    ]
+    rows = []
+    for base in results:
+        rows.append(
+            [
+                base["name"],
+                base["ambiente"] or "",
+                base["descricao"] or "",
+                base["gestor_name"] or "",
+                base.get("sub1_name") or "",
+                base.get("sub2_name") or "",
+            ]
+        )
+
+    return build_xlsx_response(headers, rows, "bases_export.xlsx")
+
+
 @app.route("/importar", methods=["GET", "POST"])
 @login_required
 def import_records():
     return render_template("import.html")
+
+
+@app.route("/importar/gestores/modelo")
+@login_required
+def download_gestor_template():
+    headers = ["Nome", "Secretaria", "Coordenação", "E-mail"]
+    rows = [["Maria Oliveira", "Secretaria de Dados", "Coordenação A", "maria@exemplo.com"]]
+    return build_xlsx_response(headers, rows, "modelo_gestores.xlsx")
+
+
+@app.route("/importar/bases/modelo")
+@login_required
+def download_bases_template():
+    headers = [
+        "Base",
+        "Ambiente",
+        "Descrição",
+        "Gestor titular",
+        "1º substituto",
+        "2º substituto",
+    ]
+    rows = [["Data Warehouse", "Produção", "Repositório principal", "Maria Oliveira", "João Silva", "Ana Souza"]]
+    return build_xlsx_response(headers, rows, "modelo_bases.xlsx")
+
+
+@app.route("/importar/relacionamentos/modelo")
+@login_required
+def download_relationships_template():
+    headers = ["Base", "Gestor titular", "1º substituto", "2º substituto"]
+    rows = [["Data Lake", "Maria Oliveira", "", ""]]
+    return build_xlsx_response(headers, rows, "modelo_relacionamentos.xlsx")
 
 
 def require_import_data(flow):

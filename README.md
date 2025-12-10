@@ -86,6 +86,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 - Importação em massa de gestores via CSV ou XLSX com escolha de delimitador para CSV.
 - Importação em massa de bases com mapeamento de colunas, gestor titular obrigatório e substitutos opcionais vinculados pelo nome.
 - Extração guiada de metadados do Teradata com montagem automática da string JDBC, teste de conexão e aplicação direta nas bases.
+- Download de modelos XLSX para cada tipo de importação e exportação dos resultados filtrados (bases e gestores) prontos para reimportar.
 - Relatórios com gráfico de cobertura de gestores, total de gestores cadastrados e distribuição de bases por coordenação e ambiente.
 - Mensagens de feedback em todas as operações.
 - Menu do usuário no topo para acessar **Configurações**, logout e abrir a modal **Novo** para escolher entre cadastrar gestor ou base.
@@ -103,6 +104,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 ## Importar gestores via arquivo
 
 1. Acesse o menu **Importar** e escolha **Importar gestores**.
+2. Opcional: clique em **Baixar modelo XLSX** na etapa inicial para usar um template já formatado.
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Na etapa **Mapeamento**, associe cada campo do gestor (`Nome`, `Secretaria`, `Coordenação`, `E-mail`) a uma coluna do arquivo — você pode escolher qualquer coluna disponível.
 4. Revise o resumo e inicie a importação na etapa final. O progresso, total processado e eventuais avisos são exibidos na tela, com opção de reiniciar ou voltar aos gestores.
@@ -110,6 +112,7 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 ## Importar bases via arquivo
 
 1. Acesse o menu **Importar** e escolha **Importar bases**.
+2. Opcional: baixe o **modelo XLSX** na etapa inicial para preencher rapidamente com as colunas padrão.
 2. Na etapa **Arquivo**, selecione um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Na etapa **Mapeamento**, associe colunas do arquivo aos campos da base (`Base`, `Gestor`) e, se desejar, informe também `Ambiente`, `Descrição` e as colunas de **1º** e **2º substitutos**.
 4. Na etapa final, confirme a importação. O sistema procura os gestores pelo nome para vincular o titular e substitutos (quando informados), mostrando progresso, totais e eventuais avisos caso algum nome não seja encontrado.
@@ -119,9 +122,15 @@ Se usar outro local, defina `TERADATA_JDBC_DIR` apontando para a pasta com os JA
 Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extração) e você só precisar atualizar o titular e os substitutos:
 
 1. Acesse o menu **Importar** e escolha **Vincular bases e gestores**.
+2. Opcional: baixe o **modelo XLSX** na etapa inicial para preencher rapidamente os nomes de base e gestores.
 2. Envie um **CSV** ou **XLSX** e informe o delimitador se estiver usando CSV (padrão `;`).
 3. Mapeie as colunas obrigatórias **Base** (nome da base) e **Gestor** (nome do titular). As colunas de **1º substituto** e **2º substituto** são opcionais.
 4. Revise o resumo e inicie a atualização. O sistema localiza bases e gestores pelo nome, aplica as alterações e exibe progresso, totais processados e avisos se algum nome não for encontrado.
+
+## Exportar resultados filtrados
+
+- Em **Gestores**, use o botão **Exportar resultados** (respeita a busca digitada) para baixar um XLSX já no formato do importador de gestores.
+- Em **Pesquisa de bases**, após preencher os filtros e/ou a busca, clique em **Exportar resultados** para baixar um XLSX compatível com a importação de bases/vínculos.
 
 ## Extração de metadados (Teradata)
 

@@ -8,6 +8,7 @@
       <h2>Lista de gestores</h2>
       <p class="subtitle">Pesquise pelo nome, secretaria, coordenação ou e-mail.</p>
     </div>
+    <a class="button secondary compact" href="{{ url_for('export_gestors', q=query) }}"><span class="icon">📤</span><span>Exportar resultados</span></a>
   </header>
   <form method="get" class="inline-form">
     <input type="text" name="q" placeholder="Buscar gestores" value="{{ query }}" />
