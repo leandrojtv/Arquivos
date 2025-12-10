@@ -1252,8 +1252,8 @@ def export_bases_search():
                 base["ambiente"] or "",
                 base["descricao"] or "",
                 base["gestor_name"] or "",
-                base.get("sub1_name") or "",
-                base.get("sub2_name") or "",
+                base["sub1_name"] or "",
+                base["sub2_name"] or "",
             ]
         )
 
