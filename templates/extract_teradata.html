@@ -43,6 +43,17 @@
         <label for="extra_params">Parâmetros extras</label>
         <input type="text" name="extra_params" id="extra_params" value="{{ bucket.get('config', {}).get('extra_params','') }}" placeholder="ex.: DBS_PORT=1025,CHARSET=UTF8" />
       </div>
+      <div>
+        <label for="log_level">Nível de log</label>
+        <select name="log_level" id="log_level">
+          {% set level = bucket.get('log_level','INFO') %}
+          <option value="ERROR" {% if level=='ERROR' %}selected{% endif %}>Error</option>
+          <option value="WARN" {% if level=='WARN' %}selected{% endif %}>Warn</option>
+          <option value="INFO" {% if level=='INFO' %}selected{% endif %}>Info</option>
+          <option value="DEBUG" {% if level=='DEBUG' %}selected{% endif %}>Debug</option>
+          <option value="VERBOSE" {% if level=='VERBOSE' %}selected{% endif %}>Verbose</option>
+        </select>
+      </div>
     </div>
     <label for="jdbc_url">String JDBC (opcional)</label>
     <input type="text" name="jdbc_url" id="jdbc_url" value="{{ bucket.get('config', {}).get('jdbc_url','') }}" placeholder="jdbc:teradata://host/DATABASE=DBC,LOGMECH=TD2" />
@@ -181,6 +192,7 @@
           <div><strong>Resource:</strong> {{ bucket.get('resource_name','Recurso Teradata') }}</div>
           <div><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</div>
           <div><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</div>
+          <div><strong>Log:</strong> {{ bucket.get('log_level','INFO') }}</div>
         </div>
         <div class="card inset schedule-callout">
           <div class="badge">Schedule</div>

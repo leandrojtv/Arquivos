@@ -140,8 +140,8 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 
 1. Abra o menu **Extração** para ver a lista de **resources** já configurados. Cada resource guarda a conexão e o modo de extração e pode gerar várias execuções (jobs).
 2. Clique em **Novo resource** ou em **Editar** para abrir o fluxo do conector **Teradata**.
-3. Na etapa **Conexão**, informe **Nome do resource**, host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`).
-4. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo.
+3. Na etapa **Conexão**, informe **Nome do resource**, host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`) e escolher o **nível de log** (Error, Warn, Info, Debug ou Verbose) para filtrar o que será registrado nos jobs, semelhante ao log4j.
+4. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo. Se a conexão falhar, nenhum dado de exemplo é aplicado e o job ficará com status de erro.
 5. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que executa a consulta `select d.DatabaseName, d.CommentString from DBC.DatabasesV where DBKind='D'`.
 6. Em **Agenda**, selecione **Execução única** ou associe um **schedule** existente (criado no menu do usuário) para reaproveitar a programação em outros resources.
 7. Em **Extração**, revise o resumo e clique em **Salvar** para apenas gravar/atualizar o resource (sem criar job) ou **Salvar e executar** para gerar um job imediato vinculado ao resource. As bases são vinculadas automaticamente ao gestor padrão de metadados.
@@ -157,9 +157,9 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 
 ## Monitorar jobs e logs
 
-- No menu suspenso do usuário, acesse **Jobs de extração** para ver histórico, progresso e status de cada execução.
+- No menu suspenso do usuário, acesse **Jobs de extração** para ver histórico, progresso e status de cada execução, incluindo o último erro (quando houver) e o nível de log aplicado.
 - Cada execução aparece associada ao **resource** que a originou. Use **Restart** para reprocessar com o mesmo snapshot ou **Editar** para ajustar o resource antes de criar um novo job.
-- Clique em **Logs** para baixar o log de execução e investigar eventuais falhas.
+- Clique em **Logs** para baixar o log de execução (carimbo horário + nível) e investigar eventuais falhas respeitando o filtro configurado no resource.
 
 ## Relatórios
 

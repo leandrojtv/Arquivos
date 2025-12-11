@@ -105,6 +105,7 @@ def init_db():
             connector TEXT NOT NULL,
             extraction_type TEXT NOT NULL,
             mode TEXT NOT NULL,
+            log_level TEXT DEFAULT 'INFO',
             host TEXT,
             jdbc_url TEXT,
             connection_type TEXT,
@@ -134,6 +135,7 @@ def init_db():
             connector TEXT NOT NULL,
             extraction_type TEXT NOT NULL,
             mode TEXT NOT NULL,
+            log_level TEXT DEFAULT 'INFO',
             host TEXT,
             jdbc_url TEXT,
             connection_type TEXT,
@@ -278,6 +280,9 @@ def migrate_extraction_jobs():
     conn = sqlite3.connect(DB_PATH)
     columns = conn.execute("PRAGMA table_info(extraction_jobs)").fetchall()
     names = {col[1] for col in columns}
+    if columns and "log_level" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN log_level TEXT DEFAULT 'INFO'")
+        conn.execute("UPDATE extraction_jobs SET log_level = 'INFO' WHERE log_level IS NULL")
     if columns and "host" not in names:
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN host TEXT")
     if columns and "password" not in names:
@@ -299,6 +304,10 @@ def migrate_extraction_jobs():
 def migrate_extraction_resources():
     conn = sqlite3.connect(DB_PATH)
     columns = conn.execute("PRAGMA table_info(extraction_resources)").fetchall()
+    col_names = {c[1] for c in columns}
+    if columns and "log_level" not in col_names:
+        conn.execute("ALTER TABLE extraction_resources ADD COLUMN log_level TEXT DEFAULT 'INFO'")
+        conn.execute("UPDATE extraction_resources SET log_level = 'INFO' WHERE log_level IS NULL")
     if not columns:
         conn.close()
         return
@@ -309,15 +318,16 @@ def migrate_extraction_resources():
         cur = conn.execute(
             """
             INSERT INTO extraction_resources (
-                name, connector, extraction_type, mode, host, jdbc_url, connection_type, database_name,
+                name, connector, extraction_type, mode, log_level, host, jdbc_url, connection_type, database_name,
                 password, username, extra_params, schedule_id, run_once, next_run_at, last_run_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name_hint,
                 job["connector"],
                 job["extraction_type"],
                 job["mode"],
+                job["log_level"] if "log_level" in job.keys() else "INFO",
                 job["host"],
                 job["jdbc_url"],
                 job["connection_type"],
@@ -515,6 +525,7 @@ def create_extraction_job(
     extraction_type,
     mode,
     config,
+    log_level="INFO",
     resource_id=None,
     schedule_id=None,
     run_once=True,
@@ -524,14 +535,15 @@ def create_extraction_job(
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO extraction_jobs (resource_id, connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO extraction_jobs (resource_id, connector, extraction_type, mode, log_level, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             resource_id,
             connector,
             extraction_type,
             mode,
+            log_level,
             config.get("host"),
             config.get("jdbc_url"),
             config.get("connection_type"),
@@ -552,20 +564,21 @@ def create_extraction_job(
     return job_id
 
 
-def create_extraction_resource(name, connector, extraction_type, mode, config, schedule_id=None, run_once=True, next_run_at=None):
+def create_extraction_resource(name, connector, extraction_type, mode, config, schedule_id=None, run_once=True, next_run_at=None, log_level="INFO"):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
         INSERT INTO extraction_resources (
-            name, connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params,
+            name, connector, extraction_type, mode, log_level, host, jdbc_url, connection_type, database_name, password, username, extra_params,
             schedule_id, run_once, next_run_at, last_run_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
             connector,
             extraction_type,
             mode,
+            log_level,
             config.get("host"),
             config.get("jdbc_url"),
             config.get("connection_type"),
@@ -585,7 +598,7 @@ def create_extraction_resource(name, connector, extraction_type, mode, config, s
     return rid
 
 
-def update_extraction_resource(resource_id, *, name=None, connector=None, extraction_type=None, mode=None, config=None, schedule_id=None, run_once=None, next_run_at=None, last_run_at=None):
+def update_extraction_resource(resource_id, *, name=None, connector=None, extraction_type=None, mode=None, log_level=None, config=None, schedule_id=None, run_once=None, next_run_at=None, last_run_at=None):
     conn = sqlite3.connect(DB_PATH)
     sets = []
     params = []
@@ -601,6 +614,9 @@ def update_extraction_resource(resource_id, *, name=None, connector=None, extrac
     if mode is not None:
         sets.append("mode = ?")
         params.append(mode)
+    if log_level is not None:
+        sets.append("log_level = ?")
+        params.append(log_level)
     if config is not None:
         sets.extend(
             [
@@ -652,6 +668,7 @@ def update_extraction_job(
     next_run_at=None,
     last_run_at=None,
     run_once=None,
+    log_level=None,
 ):
     conn = sqlite3.connect(DB_PATH)
     sets = []
@@ -668,6 +685,9 @@ def update_extraction_job(
     if error is not None:
         sets.append("error = ?")
         params.append(error)
+    if log_level is not None:
+        sets.append("log_level = ?")
+        params.append(log_level)
     if next_run_at is not None:
         sets.append("next_run_at = ?")
         params.append(next_run_at)
@@ -685,11 +705,38 @@ def update_extraction_job(
 
 
 def append_job_log(job_id, message, reset=False):
+    LEVELS = {"ERROR": 40, "WARN": 30, "INFO": 20, "DEBUG": 10, "VERBOSE": 5}
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    existing = conn.execute("SELECT log FROM extraction_jobs WHERE id = ?", (job_id,)).fetchone()
+    existing = conn.execute(
+        "SELECT log, log_level FROM extraction_jobs WHERE id = ?", (job_id,)
+    ).fetchone()
+    threshold = (existing["log_level"] if existing else "INFO") or "INFO"
+    threshold_norm = threshold.upper()
+    level_norm = "INFO"
+    text = message
+    if isinstance(message, tuple) and len(message) == 2:
+        level_norm = str(message[0]).upper()
+        text = message[1]
+    elif isinstance(message, dict):
+        level_norm = str(message.get("level", "INFO")).upper()
+        text = message.get("message", "")
+    elif "|" in message:
+        # allow preformatted "LEVEL|text"
+        maybe_level, _, maybe_msg = message.partition("|")
+        if maybe_level.upper() in LEVELS:
+            level_norm = maybe_level.upper()
+            text = maybe_msg.strip()
+
+    level_score = LEVELS.get(level_norm, 20)
+    if level_score < LEVELS.get(threshold_norm, 20) and not reset:
+        conn.close()
+        return
+
+    stamp = datetime.utcnow().isoformat()
+    line = f"[{stamp}][{level_norm}] {text}" if text else f"[{stamp}][{level_norm}]"
     current_log = existing["log"] if existing and existing["log"] else ""
-    new_log = message if reset or not current_log else f"{current_log}\n{message}"
+    new_log = line if reset or not current_log else f"{current_log}\n{line}"
     conn.execute(
         "UPDATE extraction_jobs SET log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (new_log, job_id),
@@ -946,9 +993,6 @@ def test_teradata_connection(config):
 
 
 def fetch_teradata_metadata(config):
-    # Placeholder simples: tenta usar o driver se existir, caso contrário devolve amostra.
-    database_name = config.get("database_name") or "database"
-    sample_note = None
     try:
         conn, _ = open_teradata_connection(config)
         query = """
@@ -963,18 +1007,12 @@ def fetch_teradata_metadata(config):
         return [
             {"DatabaseName": row[0], "CommentString": row[1] if len(row) > 1 else ""}
             for row in rows
-        ], None
+        ], None, None
     except Exception as exc:
-        sample_note = (
-            f"Extração simulada (driver JDBC indisponível nesta execução: {exc})."
-            if str(exc)
-            else "Extração simulada (driver JDBC indisponível nesta execução)."
-        )
-
-    return [
-        {"DatabaseName": database_name, "CommentString": "Base importada via simulação."},
-        {"DatabaseName": f"{database_name}_ANALYTICS", "CommentString": "Exemplo de metadado."},
-    ], sample_note
+        extra = ""
+        if not find_teradata_jars():
+            extra = f". Driver JDBC não encontrado em {TERADATA_DRIVER_DIR}"
+        return [], None, f"Falha ao extrair metadados: {exc}{extra}" if str(exc) else "Falha ao extrair metadados."
 
 
 def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
@@ -1021,14 +1059,23 @@ def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
 
 
 def run_teradata_job(config, mode, extraction_type, job_id):
-    append_job_log(job_id, "Iniciando extração de metadados do Teradata...", reset=True)
+    append_job_log(job_id, ("INFO", "Iniciando extração de metadados do Teradata..."), reset=True)
     update_extraction_job(job_id, status="running", progress=10, error=None)
 
-    rows, note = fetch_teradata_metadata(config)
+    rows, note, error_message = fetch_teradata_metadata(config)
     if note:
-        append_job_log(job_id, note)
+        append_job_log(job_id, ("INFO", note))
+    if error_message:
+        append_job_log(job_id, ("ERROR", error_message))
+        update_extraction_job(job_id, status="failed", progress=5, error=error_message)
+        return {
+            "total": 0,
+            "imported": 0,
+            "errors": [error_message],
+            "note": note,
+        }
 
-    append_job_log(job_id, "Processando bases extraídas...")
+    append_job_log(job_id, ("DEBUG", "Processando bases extraídas..."))
     update_extraction_job(job_id, progress=40)
 
     gestor_id = ensure_default_extractor_gestor()
@@ -1039,11 +1086,11 @@ def run_teradata_job(config, mode, extraction_type, job_id):
     error_text = "\n".join(errors) if errors else None
 
     update_extraction_job(job_id, status=status, progress=progress, error=error_text)
-    append_job_log(job_id, f"Linhas recebidas: {len(rows)}. Bases aplicadas: {imported}.")
+    append_job_log(job_id, ("INFO", f"Linhas recebidas: {len(rows)}. Bases aplicadas: {imported}."))
     if errors:
-        append_job_log(job_id, "Ocorreram avisos durante a execução:")
+        append_job_log(job_id, ("WARN", "Ocorreram avisos durante a execução:"))
         for err in errors:
-            append_job_log(job_id, f"- {err}")
+            append_job_log(job_id, ("WARN", f"- {err}"))
 
     return {
         "total": len(rows),
@@ -1108,7 +1155,12 @@ def run_extraction_job(job):
     job_row = job if isinstance(job, dict) else get_job(job_id)
     config = job_to_config(job_row)
     update_extraction_job(job_row["id"], status="running", progress=0, error=None)
-    result = run_teradata_job(config, job_row["mode"], job_row["extraction_type"], job_row["id"])
+    try:
+        result = run_teradata_job(config, job_row["mode"], job_row["extraction_type"], job_row["id"])
+    except Exception as exc:  # pragma: no cover - runtime guardrail
+        append_job_log(job_row["id"], ("ERROR", f"Erro inesperado: {exc}"))
+        update_extraction_job(job_row["id"], status="failed", progress=0, error=str(exc))
+        result = {"total": 0, "imported": 0, "errors": [str(exc)], "note": None}
     finalize_next_run(job_row["id"], job_row)
     return result
 
@@ -1145,6 +1197,7 @@ def dispatch_due_jobs():
                 "username": res["username"],
                 "extra_params": res["extra_params"],
             },
+            log_level=res["log_level"] if "log_level" in res.keys() else "INFO",
             resource_id=res["id"],
             schedule_id=res["schedule_id"],
             run_once=True,
@@ -2336,6 +2389,7 @@ def prefill_from_job(job_id, bucket):
     bucket["extraction_type"] = job["extraction_type"] or "metadata"
     bucket["schedule_id"] = job["schedule_id"]
     bucket["run_once"] = bool(job["run_once"]) if job["run_once"] is not None else True
+    bucket["log_level"] = (job["log_level"] or "INFO") if "log_level" in job.keys() else "INFO"
 
 
 def prefill_from_resource(resource_id, bucket):
@@ -2358,6 +2412,7 @@ def prefill_from_resource(resource_id, bucket):
     bucket["schedule_id"] = res["schedule_id"]
     bucket["run_once"] = bool(res["run_once"]) if res["run_once"] is not None else True
     bucket["next_run_at"] = res["next_run_at"]
+    bucket["log_level"] = (res["log_level"] or "INFO") if "log_level" in res.keys() else "INFO"
 
 
 @app.route("/extracao/teradata", methods=["GET", "POST"])
@@ -2368,6 +2423,8 @@ def extract_teradata():
     bucket = get_flow_bucket(flow)
     job_id_param = request.args.get("job_id")
     resource_id_param = request.args.get("resource_id")
+    if not bucket.get("log_level"):
+        bucket["log_level"] = "INFO"
 
     if resource_id_param and not bucket.get("config"):
         try:
@@ -2389,6 +2446,7 @@ def extract_teradata():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         extra_params = request.form.get("extra_params", "").strip()
+        log_level = request.form.get("log_level", bucket.get("log_level", "INFO")) or "INFO"
         jdbc_url = manual_jdbc or build_jdbc_url(host, database_name, connection_type, extra_params)
 
         bucket["resource_name"] = resource_name
@@ -2401,6 +2459,7 @@ def extract_teradata():
             "password": password,
             "extra_params": extra_params,
         }
+        bucket["log_level"] = log_level.upper()
 
         if request.form.get("action") == "test":
             ok, message = test_teradata_connection(bucket["config"])
@@ -2488,6 +2547,7 @@ def extract_teradata():
                     connector="teradata",
                     extraction_type=extraction_type,
                     mode=mode,
+                    log_level=bucket.get("log_level", "INFO"),
                     config=config,
                     schedule_id=schedule_id,
                     run_once=run_once,
@@ -2500,6 +2560,7 @@ def extract_teradata():
                     extraction_type,
                     mode,
                     config,
+                    log_level=bucket.get("log_level", "INFO"),
                     schedule_id=schedule_id,
                     run_once=run_once,
                     next_run_at=next_run_at,
@@ -2521,6 +2582,7 @@ def extract_teradata():
                 extraction_type,
                 mode,
                 config,
+                log_level=bucket.get("log_level", "INFO"),
                 resource_id=resource_id,
                 schedule_id=schedule_id,
                 run_once=True,
@@ -2743,6 +2805,7 @@ def run_resource(resource_id):
             "username": res["username"],
             "extra_params": res["extra_params"],
         },
+        log_level=res["log_level"] if "log_level" in res.keys() else "INFO",
         resource_id=resource_id,
         schedule_id=res["schedule_id"],
     )
