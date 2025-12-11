@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body class="app-shell">
-    <div class="dashboard-shell {% if session.get('user') %}has-sidebar{% endif %}">
+    <div class="dashboard-shell {% if session.get('user') %}has-sidebar sidebar-open{% endif %}">
       {% if session.get('user') %}
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -111,8 +111,9 @@
       </div>
     </div>
     {% if session.get('user') %}
-    <script>
-      const toggleModal = (targetId, open) => {
+      <script>
+        const shell = document.querySelector('.dashboard-shell');
+        const toggleModal = (targetId, open) => {
         const el = document.getElementById(targetId);
         if (!el) return;
         if (open) {
@@ -139,38 +140,31 @@
 
         const sidebar = document.getElementById('sidebar');
         const menuToggle = document.querySelector('.menu-toggle');
-        if (sidebar && menuToggle && !sidebar.contains(event.target) && !menuToggle.contains(event.target)) {
-          sidebar.classList.remove('open');
-          shell?.classList.remove('sidebar-open');
-          menuToggle.setAttribute('aria-expanded', 'false');
-        }
-      });
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          document.querySelectorAll('.modal-overlay.open').forEach((el) => toggleModal(el.id, false));
-          const sidebar = document.getElementById('sidebar');
-          const toggle = document.querySelector('.menu-toggle');
-          if (sidebar && toggle) {
-            sidebar.classList.remove('open');
+          if (sidebar && menuToggle && !sidebar.contains(event.target) && !menuToggle.contains(event.target)) {
             shell?.classList.remove('sidebar-open');
-            toggle.setAttribute('aria-expanded', 'false');
+            menuToggle.setAttribute('aria-expanded', 'false');
           }
-        }
-      });
-      const menuToggle = document.querySelector('.menu-toggle');
-      const sidebar = document.getElementById('sidebar');
-      const shell = document.querySelector('.dashboard-shell');
-      if (menuToggle && sidebar) {
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay.open').forEach((el) => toggleModal(el.id, false));
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.querySelector('.menu-toggle');
+            if (sidebar && toggle) {
+              shell?.classList.remove('sidebar-open');
+              toggle.setAttribute('aria-expanded', 'false');
+            }
+          }
+        });
+        const menuToggle = document.querySelector('.menu-toggle');
+        const sidebar = document.getElementById('sidebar');
+      if (menuToggle && sidebar && shell) {
         if (window.innerWidth > 1024) {
-          sidebar.classList.add('open');
-          shell?.classList.add('sidebar-open');
+          shell.classList.add('sidebar-open');
           menuToggle.setAttribute('aria-expanded', 'true');
         }
         menuToggle.addEventListener('click', () => {
-          const isOpen = sidebar.classList.toggle('open');
-          if (shell) {
-            shell.classList.toggle('sidebar-open', isOpen);
-          }
+          const isOpen = shell.classList.toggle('sidebar-open');
           menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         });
       }
