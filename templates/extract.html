@@ -8,7 +8,6 @@
       <h2>Extração de metadados</h2>
       <p class="subtitle">Configure conectores e dispare fluxos em etapas para preencher as bases direto da fonte.</p>
     </div>
-    <div class="pill">Nova</div>
   </div>
   <div class="grid-two">
     <a class="card action-card" href="{{ url_for('extract_teradata') }}">
@@ -70,7 +69,7 @@
                 {% endif %}
               </td>
               <td class="text-right">
-                <div class="table-actions">
+                <div class="table-actions compact">
                   <form method="post" action="{{ url_for('run_resource', resource_id=res['id']) }}" class="inline">
                     <button type="submit" class="btn ghost"><svg class="icon"><use href="#icon-play"></use></svg><span>Executar</span></button>
                   </form>

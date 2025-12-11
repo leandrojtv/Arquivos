@@ -1616,12 +1616,34 @@ table td.compact {
     grid-template-columns: auto 1fr auto;
   }
 
-  .main-nav {
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-  }
+.main-nav {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.table-actions.compact .button,
+.table-actions.compact .btn,
+.actions-inline .button,
+.actions-inline .btn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+
+.table-actions.compact svg.icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 @media (max-width: 640px) {
