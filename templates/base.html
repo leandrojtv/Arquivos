@@ -113,68 +113,76 @@
     {% if session.get('user') %}
       <script>
         const shell = document.querySelector('.dashboard-shell');
-        const toggleModal = (targetId, open) => {
-        const el = document.getElementById(targetId);
-        if (!el) return;
-        if (open) {
-          el.classList.add('open');
-          el.setAttribute('aria-hidden', 'false');
-        } else {
-          el.classList.remove('open');
-          el.setAttribute('aria-hidden', 'true');
-        }
-      };
-      document.addEventListener('click', (event) => {
-        const openTrigger = event.target.closest('.open-modal');
-        if (openTrigger) {
-          toggleModal(openTrigger.dataset.target, true);
-        }
-        const closeTrigger = event.target.closest('.close-modal');
-        if (closeTrigger) {
-          toggleModal(closeTrigger.dataset.target, false);
-        }
-        const overlay = event.target.classList.contains('modal-overlay') ? event.target : null;
-        if (overlay) {
-          toggleModal(overlay.id, false);
-        }
-
         const sidebar = document.getElementById('sidebar');
         const menuToggle = document.querySelector('.menu-toggle');
-          if (sidebar && menuToggle && !sidebar.contains(event.target) && !menuToggle.contains(event.target)) {
-            shell?.classList.remove('sidebar-open');
-            menuToggle.setAttribute('aria-expanded', 'false');
+        const isMobile = () => window.innerWidth <= 1024;
+
+        const setSidebarState = (open) => {
+          if (!shell) return;
+          shell.classList.toggle('sidebar-open', open);
+          if (menuToggle) menuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+
+        const toggleModal = (targetId, open) => {
+          const el = document.getElementById(targetId);
+          if (!el) return;
+          if (open) {
+            el.classList.add('open');
+            el.setAttribute('aria-hidden', 'false');
+          } else {
+            el.classList.remove('open');
+            el.setAttribute('aria-hidden', 'true');
           }
-        });
-        document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') {
-            document.querySelectorAll('.modal-overlay.open').forEach((el) => toggleModal(el.id, false));
-            const sidebar = document.getElementById('sidebar');
-            const toggle = document.querySelector('.menu-toggle');
-            if (sidebar && toggle) {
-              shell?.classList.remove('sidebar-open');
-              toggle.setAttribute('aria-expanded', 'false');
+        };
+
+        document.addEventListener('click', (event) => {
+          const openTrigger = event.target.closest('.open-modal');
+          if (openTrigger) {
+            toggleModal(openTrigger.dataset.target, true);
+          }
+          const closeTrigger = event.target.closest('.close-modal');
+          if (closeTrigger) {
+            toggleModal(closeTrigger.dataset.target, false);
+          }
+          const overlay = event.target.classList.contains('modal-overlay') ? event.target : null;
+          if (overlay) {
+            toggleModal(overlay.id, false);
+          }
+
+          if (isMobile() && shell?.classList.contains('sidebar-open') && sidebar && menuToggle) {
+            if (!sidebar.contains(event.target) && !menuToggle.contains(event.target)) {
+              setSidebarState(false);
             }
           }
         });
-        const menuToggle = document.querySelector('.menu-toggle');
-        const sidebar = document.getElementById('sidebar');
-      if (menuToggle && sidebar && shell) {
-        if (window.innerWidth > 1024) {
-          shell.classList.add('sidebar-open');
-          menuToggle.setAttribute('aria-expanded', 'true');
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay.open').forEach((el) => toggleModal(el.id, false));
+            if (isMobile()) setSidebarState(false);
+          }
+        });
+
+        if (menuToggle && sidebar && shell) {
+          setSidebarState(!isMobile());
+          menuToggle.addEventListener('click', () => {
+            if (isMobile()) {
+              setSidebarState(!shell.classList.contains('sidebar-open'));
+            }
+          });
+
+          window.addEventListener('resize', () => {
+            setSidebarState(!isMobile());
+          });
         }
-        menuToggle.addEventListener('click', () => {
-          const isOpen = shell.classList.toggle('sidebar-open');
-          menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+        document.querySelectorAll('.close-sidebar').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.dataset.target);
+            if (target) target.classList.remove('open');
+            setSidebarState(false);
+          });
         });
-      }
-      document.querySelectorAll('.close-sidebar').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const target = document.getElementById(btn.dataset.target);
-          if (target) target.classList.remove('open');
-          shell?.classList.remove('sidebar-open');
-        });
-      });
     </script>
     {% endif %}
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
