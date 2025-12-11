@@ -44,17 +44,17 @@
 
       <div class="workspace">
         <header class="site-header">
-          <div class="header-main">
+          <div class="page-grid header-main">
             {% if session.get('user') %}
             <button class="menu-toggle ghost" type="button" aria-expanded="false" aria-controls="sidebar">
               <svg class="icon"><use href="#icon-menu"></use></svg>
             </button>
             {% endif %}
-          <div>
+          <div class="page-title">
             <p class="eyebrow">Painel</p>
-              <h1>Cadastro de Bases e Gestores</h1>
-              <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
-            </div>
+            <h1>Cadastro de Bases e Gestores</h1>
+            <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
+          </div>
             {% if session.get('user') %}
             <div class="user-menu" tabindex="0">
               <div class="user-trigger">
@@ -72,6 +72,7 @@
             {% else %}
             <a href="{{ url_for('login') }}" class="pill">Login</a>
             {% endif %}
+          </div>
           </div>
         </header>
     {% if session.get('user') %}
@@ -93,17 +94,19 @@
       </div>
     </div>
     {% endif %}
-    <main>
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <ul class="messages">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-      {% endwith %}
-      {% block content %}{% endblock %}
+    <main class="page-area">
+      <div class="page-grid">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="messages">
+              {% for category, message in messages %}
+                <li class="{{ category }}">{{ message }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </div>
     </main>
       </div>
     </div>
