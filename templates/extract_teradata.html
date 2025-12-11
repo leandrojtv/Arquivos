@@ -18,8 +18,12 @@
     <div class="wizard-step">3. Agenda</div>
     <div class="wizard-step">4. Extração</div>
   </div>
-  <form action="{{ url_for('extract_teradata', step='config') }}" method="post" class="card">
+  <form action="{{ url_for('extract_teradata', step='config', resource_id=bucket.get('resource_id')) }}" method="post" class="card">
     <div class="grid-two">
+      <div>
+        <label for="resource_name">Nome do resource</label>
+        <input type="text" name="resource_name" id="resource_name" value="{{ bucket.get('resource_name','') }}" placeholder="ex.: Teradata Produção" />
+      </div>
       <div>
         <label for="host">Host / IP</label>
         <input type="text" name="host" id="host" value="{{ bucket.get('config', {}).get('host','') }}" placeholder="ex.: tera.company.local" />
@@ -68,12 +72,12 @@
     <div class="wizard-step">3. Agenda</div>
     <div class="wizard-step">4. Extração</div>
   </div>
-  <form action="{{ url_for('extract_teradata', step='tipos') }}" method="post" class="card">
+  <form action="{{ url_for('extract_teradata', step='tipos', resource_id=bucket.get('resource_id')) }}" method="post" class="card">
     <p class="form-helper">Escolha o tipo de execução e o modo. No incremental apenas bases novas ou atualizações são aplicadas; a execução completa limpa as bases vindas do Teradata antes de inserir novamente.</p>
     <div class="grid-two">
       <div class="card inset">
         <label class="radio-tile">
-          <input type="radio" name="extraction_type" value="metadata" checked />
+          <input type="radio" name="extraction_type" value="metadata" {% if bucket.get('extraction_type','metadata') == 'metadata' %}checked{% endif %} />
           <div>
             <strong>Metadados</strong>
             <p>Busca DatabaseName e CommentString conforme a consulta informada.</p>
@@ -117,7 +121,7 @@
     <div class="wizard-step active">3. Agenda</div>
     <div class="wizard-step">4. Extração</div>
   </div>
-  <form action="{{ url_for('extract_teradata', step='agenda') }}" method="post" class="card">
+  <form action="{{ url_for('extract_teradata', step='agenda', resource_id=bucket.get('resource_id')) }}" method="post" class="card">
     <p class="form-helper">Escolha se deseja executar apenas uma vez ou vincular a um schedule existente para reuso em novos jobs.</p>
     <label class="radio-tile">
       <input type="radio" name="execution_plan" value="once" {% if bucket.get('run_once', True) %}checked{% endif %} />
@@ -174,6 +178,7 @@
           <div class="muted">Banco: {{ connection_summary.database or '—' }} · Host: {{ connection_summary.host or '—' }} · Tipo: {{ connection_summary.type or '—' }} · Usuário: {{ connection_summary.user or '—' }}</div>
         </div>
         <div class="summary-list compact">
+          <div><strong>Resource:</strong> {{ bucket.get('resource_name','Recurso Teradata') }}</div>
           <div><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</div>
           <div><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</div>
         </div>
@@ -191,6 +196,9 @@
           {% else %}
           <p class="subtitle">Execução única; nenhuma agenda vinculada.</p>
           {% endif %}
+          {% if bucket.get('next_run_at') %}
+          <div class="muted">Próxima execução agendada: {{ bucket.get('next_run_at') }}</div>
+          {% endif %}
         </div>
       </div>
       <div>
@@ -198,7 +206,7 @@
         <p class="subtitle">As bases extraídas são atribuídas ao gestor padrão de metadados para manter o vínculo obrigatório.</p>
       </div>
     </div>
-    <form action="{{ url_for('extract_teradata', step='executar') }}" method="post" class="actions-inline">
+    <form action="{{ url_for('extract_teradata', step='executar', resource_id=bucket.get('resource_id')) }}" method="post" class="actions-inline">
       <button type="submit" name="action" value="save" class="button ghost"><svg class="icon"><use href="#icon-save"></use></svg><span>Salvar</span></button>
       <button type="submit" name="action" value="execute" class="button"><svg class="icon"><use href="#icon-rocket"></use></svg><span>Salvar e executar</span></button>
       <a class="button ghost" href="{{ url_for('extraction_menu') }}"><svg class="icon"><use href="#icon-flag"></use></svg><span>Voltar</span></a>

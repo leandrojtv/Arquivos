@@ -138,12 +138,13 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 
 ## Extração de metadados (Teradata)
 
-1. Abra o menu **Extração** e escolha o conector **Teradata**.
-2. Na etapa **Conexão**, preencha host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`).
-3. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo.
-4. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que executa a consulta `select d.DatabaseName, d.CommentString from DBC.DatabasesV where DBKind='D'`.
-5. Em **Agenda**, selecione **Execução única** ou associe um **schedule** existente (criado no menu do usuário) para reaproveitar a programação em outros jobs.
-6. Em **Extração**, revise o resumo e clique em **Iniciar extração**. As bases são vinculadas automaticamente ao gestor padrão de metadados.
+1. Abra o menu **Extração** para ver a lista de **resources** já configurados. Cada resource guarda a conexão e o modo de extração e pode gerar várias execuções (jobs).
+2. Clique em **Novo resource** ou em **Editar** para abrir o fluxo do conector **Teradata**.
+3. Na etapa **Conexão**, informe **Nome do resource**, host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`).
+4. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo.
+5. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que executa a consulta `select d.DatabaseName, d.CommentString from DBC.DatabasesV where DBKind='D'`.
+6. Em **Agenda**, selecione **Execução única** ou associe um **schedule** existente (criado no menu do usuário) para reaproveitar a programação em outros resources.
+7. Em **Extração**, revise o resumo e clique em **Salvar** para apenas gravar/atualizar o resource (sem criar job) ou **Salvar e executar** para gerar um job imediato vinculado ao resource. As bases são vinculadas automaticamente ao gestor padrão de metadados.
 
 > Um gestor padrão (`Gestor Padrão (Metadados)`) é criado automaticamente para garantir o vínculo obrigatório nas extrações diretas. Para cadastros manuais ou importações via arquivo, o usuário continua escolhendo o gestor titular normalmente.
 
@@ -151,13 +152,13 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 
 1. No menu do usuário (canto superior direito), clique em **Schedules** para abrir o gerenciador.
 2. Preencha **Nome**, data/hora de início, selecione os **dias da semana** e, se desejar, informe um **intervalo em minutos** e marque **Repetir indefinidamente**.
-3. Salve o schedule para reutilizar em diferentes jobs. Você pode editar ou excluir agendas existentes na mesma tela.
-4. Na etapa **Agenda** do fluxo de extração, escolha **Execução única** ou selecione um dos schedules criados para programar execuções recorrentes.
+3. Salve o schedule para reutilizar em diferentes resources. Você pode editar ou excluir agendas existentes na mesma tela.
+4. Na etapa **Agenda** do fluxo de extração, escolha **Execução única** ou selecione um dos schedules criados para programar execuções recorrentes. Resources com schedule terão seu **próximo run** calculado automaticamente e gerarão um novo job a cada disparo.
 
 ## Monitorar jobs e logs
 
 - No menu suspenso do usuário, acesse **Jobs de extração** para ver histórico, progresso e status de cada execução.
-- Use **Restart** para reprocessar um job com a mesma configuração ou **Editar** para reabrir o fluxo de extração com os dados preenchidos e ajustar antes de reiniciar.
+- Cada execução aparece associada ao **resource** que a originou. Use **Restart** para reprocessar com o mesmo snapshot ou **Editar** para ajustar o resource antes de criar um novo job.
 - Clique em **Logs** para baixar o log de execução e investigar eventuais falhas.
 
 ## Relatórios

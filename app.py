@@ -101,6 +101,7 @@ def init_db():
         """
         CREATE TABLE IF NOT EXISTS extraction_jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            resource_id INTEGER,
             connector TEXT NOT NULL,
             extraction_type TEXT NOT NULL,
             mode TEXT NOT NULL,
@@ -120,7 +121,33 @@ def init_db():
             next_run_at TEXT,
             last_run_at TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (resource_id) REFERENCES extraction_resources(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS extraction_resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            connector TEXT NOT NULL,
+            extraction_type TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            host TEXT,
+            jdbc_url TEXT,
+            connection_type TEXT,
+            database_name TEXT,
+            password TEXT,
+            username TEXT,
+            extra_params TEXT,
+            schedule_id INTEGER,
+            run_once INTEGER DEFAULT 1,
+            next_run_at TEXT,
+            last_run_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (schedule_id) REFERENCES schedules(id)
         )
         """
     )
@@ -178,6 +205,7 @@ def init_db():
     ensure_default_extractor_gestor()
     migrate_bases_nullable()
     migrate_bases_sources()
+    migrate_extraction_resources()
     migrate_extraction_jobs()
     conn.close()
 
@@ -262,6 +290,52 @@ def migrate_extraction_jobs():
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN next_run_at TEXT")
     if columns and "last_run_at" not in names:
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN last_run_at TEXT")
+    if columns and "resource_id" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN resource_id INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def migrate_extraction_resources():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(extraction_resources)").fetchall()
+    if not columns:
+        conn.close()
+        return
+
+    jobs = conn.execute("SELECT * FROM extraction_jobs WHERE resource_id IS NULL").fetchall()
+    for job in jobs:
+        name_hint = job["database_name"] or f"Recurso {job['id']}"
+        cur = conn.execute(
+            """
+            INSERT INTO extraction_resources (
+                name, connector, extraction_type, mode, host, jdbc_url, connection_type, database_name,
+                password, username, extra_params, schedule_id, run_once, next_run_at, last_run_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name_hint,
+                job["connector"],
+                job["extraction_type"],
+                job["mode"],
+                job["host"],
+                job["jdbc_url"],
+                job["connection_type"],
+                job["database_name"],
+                job["password"],
+                job["username"],
+                job["extra_params"],
+                job["schedule_id"],
+                job["run_once"],
+                job["next_run_at"],
+                job["last_run_at"],
+            ),
+        )
+        resource_id = cur.lastrowid
+        conn.execute(
+            "UPDATE extraction_jobs SET resource_id = ? WHERE id = ?",
+            (resource_id, job["id"]),
+        )
     conn.commit()
     conn.close()
 
@@ -441,6 +515,7 @@ def create_extraction_job(
     extraction_type,
     mode,
     config,
+    resource_id=None,
     schedule_id=None,
     run_once=True,
     status="pending",
@@ -449,10 +524,11 @@ def create_extraction_job(
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO extraction_jobs (connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO extraction_jobs (resource_id, connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            resource_id,
             connector,
             extraction_type,
             mode,
@@ -474,6 +550,97 @@ def create_extraction_job(
     job_id = cur.lastrowid
     conn.close()
     return job_id
+
+
+def create_extraction_resource(name, connector, extraction_type, mode, config, schedule_id=None, run_once=True, next_run_at=None):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        """
+        INSERT INTO extraction_resources (
+            name, connector, extraction_type, mode, host, jdbc_url, connection_type, database_name, password, username, extra_params,
+            schedule_id, run_once, next_run_at, last_run_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            name,
+            connector,
+            extraction_type,
+            mode,
+            config.get("host"),
+            config.get("jdbc_url"),
+            config.get("connection_type"),
+            config.get("database_name"),
+            config.get("password"),
+            config.get("username"),
+            config.get("extra_params"),
+            schedule_id,
+            1 if run_once else 0,
+            next_run_at,
+            None,
+        ),
+    )
+    conn.commit()
+    rid = cur.lastrowid
+    conn.close()
+    return rid
+
+
+def update_extraction_resource(resource_id, *, name=None, connector=None, extraction_type=None, mode=None, config=None, schedule_id=None, run_once=None, next_run_at=None, last_run_at=None):
+    conn = sqlite3.connect(DB_PATH)
+    sets = []
+    params = []
+    if name is not None:
+        sets.append("name = ?")
+        params.append(name)
+    if connector is not None:
+        sets.append("connector = ?")
+        params.append(connector)
+    if extraction_type is not None:
+        sets.append("extraction_type = ?")
+        params.append(extraction_type)
+    if mode is not None:
+        sets.append("mode = ?")
+        params.append(mode)
+    if config is not None:
+        sets.extend(
+            [
+                "host = ?",
+                "jdbc_url = ?",
+                "connection_type = ?",
+                "database_name = ?",
+                "password = ?",
+                "username = ?",
+                "extra_params = ?",
+            ]
+        )
+        params.extend(
+            [
+                config.get("host"),
+                config.get("jdbc_url"),
+                config.get("connection_type"),
+                config.get("database_name"),
+                config.get("password"),
+                config.get("username"),
+                config.get("extra_params"),
+            ]
+        )
+    if schedule_id is not None:
+        sets.append("schedule_id = ?")
+        params.append(schedule_id)
+    if run_once is not None:
+        sets.append("run_once = ?")
+        params.append(1 if run_once else 0)
+    if next_run_at is not None:
+        sets.append("next_run_at = ?")
+        params.append(next_run_at)
+    if last_run_at is not None:
+        sets.append("last_run_at = ?")
+        params.append(last_run_at)
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(resource_id)
+    conn.execute(f"UPDATE extraction_resources SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
 
 
 def update_extraction_job(
@@ -537,6 +704,15 @@ def get_job(job_id):
     job = conn.execute("SELECT * FROM extraction_jobs WHERE id = ?", (job_id,)).fetchone()
     conn.close()
     return job
+
+
+def get_resources():
+    return query_db("SELECT * FROM extraction_resources ORDER BY updated_at DESC")
+
+
+def get_resource(resource_id):
+    rows = query_db("SELECT * FROM extraction_resources WHERE id = ?", (resource_id,))
+    return rows[0] if rows else None
 
 
 def get_schedules():
@@ -939,20 +1115,55 @@ def run_extraction_job(job):
 
 def dispatch_due_jobs():
     now = datetime.utcnow()
-    rows = query_db(
+    resources = query_db(
         """
-        SELECT * FROM extraction_jobs
-        WHERE schedule_id IS NOT NULL AND run_once = 0 AND next_run_at IS NOT NULL AND status != 'running'
-        ORDER BY next_run_at ASC
+        SELECT r.*, s.start_date as sched_start_date, s.start_time as sched_start_time, s.days_of_week as sched_days,
+               s.interval_minutes as sched_interval, s.repeat_forever as sched_repeat
+        FROM extraction_resources r
+        LEFT JOIN schedules s ON r.schedule_id = s.id
+        WHERE r.schedule_id IS NOT NULL AND r.run_once = 0 AND r.next_run_at IS NOT NULL
+        ORDER BY r.next_run_at ASC
         """
     )
-    for row in rows:
+    for res in resources:
         try:
-            due_at = datetime.fromisoformat(row["next_run_at"])
+            due_at = datetime.fromisoformat(res["next_run_at"])
         except Exception:
             continue
-        if due_at <= now:
-            run_extraction_job(row)
+        if due_at > now:
+            continue
+        job_id = create_extraction_job(
+            res["connector"],
+            res["extraction_type"],
+            res["mode"],
+            {
+                "host": res["host"],
+                "jdbc_url": res["jdbc_url"],
+                "connection_type": res["connection_type"],
+                "database_name": res["database_name"],
+                "password": res["password"],
+                "username": res["username"],
+                "extra_params": res["extra_params"],
+            },
+            resource_id=res["id"],
+            schedule_id=res["schedule_id"],
+            run_once=True,
+            status="pending",
+        )
+        job = get_job(job_id)
+        run_extraction_job(job)
+        schedule_snapshot = {
+            "start_date": res["sched_start_date"],
+            "start_time": res["sched_start_time"],
+            "days_of_week": res["sched_days"],
+            "interval_minutes": res["sched_interval"],
+            "repeat_forever": res["sched_repeat"],
+        }
+        if schedule_snapshot.get("repeat_forever"):
+            next_run = compute_next_run(schedule_snapshot, after=datetime.utcnow())
+            update_extraction_resource(res["id"], next_run_at=next_run, last_run_at=datetime.utcnow().isoformat())
+        else:
+            update_extraction_resource(res["id"], next_run_at=None, last_run_at=datetime.utcnow().isoformat())
 
 
 def start_scheduler():
@@ -2103,7 +2314,9 @@ def import_relationships_flow():
 @app.route("/extracao")
 @login_required
 def extraction_menu():
-    return render_template("extract.html")
+    resources = get_resources()
+    schedules = {s["id"]: s for s in get_schedules()}
+    return render_template("extract.html", resources=resources, schedules=schedules, humanize_days=humanize_days)
 
 
 def prefill_from_job(job_id, bucket):
@@ -2125,6 +2338,28 @@ def prefill_from_job(job_id, bucket):
     bucket["run_once"] = bool(job["run_once"]) if job["run_once"] is not None else True
 
 
+def prefill_from_resource(resource_id, bucket):
+    res = get_resource(resource_id)
+    if not res:
+        return
+    bucket["resource_id"] = res["id"]
+    bucket["resource_name"] = res["name"]
+    bucket["config"] = {
+        "host": res["host"] or "",
+        "jdbc_url": res["jdbc_url"] or "",
+        "connection_type": res["connection_type"] or "TD2",
+        "database_name": res["database_name"] or "",
+        "username": res["username"] or "",
+        "password": res["password"] or "",
+        "extra_params": res["extra_params"] or "",
+    }
+    bucket["mode"] = res["mode"] or "incremental"
+    bucket["extraction_type"] = res["extraction_type"] or "metadata"
+    bucket["schedule_id"] = res["schedule_id"]
+    bucket["run_once"] = bool(res["run_once"]) if res["run_once"] is not None else True
+    bucket["next_run_at"] = res["next_run_at"]
+
+
 @app.route("/extracao/teradata", methods=["GET", "POST"])
 @login_required
 def extract_teradata():
@@ -2132,14 +2367,21 @@ def extract_teradata():
     flow = "extracao_teradata"
     bucket = get_flow_bucket(flow)
     job_id_param = request.args.get("job_id")
+    resource_id_param = request.args.get("resource_id")
 
-    if job_id_param and not bucket.get("config"):
+    if resource_id_param and not bucket.get("config"):
+        try:
+            prefill_from_resource(int(resource_id_param), bucket)
+        except ValueError:
+            pass
+    elif job_id_param and not bucket.get("config"):
         try:
             prefill_from_job(int(job_id_param), bucket)
         except ValueError:
             pass
 
     if request.method == "POST" and step == "config":
+        resource_name = request.form.get("resource_name", "").strip() or "Recurso Teradata"
         manual_jdbc = request.form.get("jdbc_url", "").strip()
         host = request.form.get("host", "").strip()
         database_name = request.form.get("database_name", "").strip()
@@ -2149,6 +2391,7 @@ def extract_teradata():
         extra_params = request.form.get("extra_params", "").strip()
         jdbc_url = manual_jdbc or build_jdbc_url(host, database_name, connection_type, extra_params)
 
+        bucket["resource_name"] = resource_name
         bucket["config"] = {
             "host": host,
             "jdbc_url": jdbc_url,
@@ -2162,11 +2405,11 @@ def extract_teradata():
         if request.form.get("action") == "test":
             ok, message = test_teradata_connection(bucket["config"])
             flash(message, "success" if ok else "error")
-            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param))
+            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param, resource_id=resource_id_param))
 
         if not jdbc_url or not username or not password:
             flash("Preencha JDBC, usuário e senha para continuar.", "error")
-            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param))
+            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param, resource_id=resource_id_param))
 
         return redirect(url_for("extract_teradata", step="tipos"))
 
@@ -2178,7 +2421,7 @@ def extract_teradata():
         if request.method == "POST":
             bucket["extraction_type"] = request.form.get("extraction_type", "metadata")
             bucket["mode"] = request.form.get("mode", "incremental")
-            return redirect(url_for("extract_teradata", step="agenda"))
+            return redirect(url_for("extract_teradata", step="agenda", resource_id=resource_id_param))
         return render_template("extract_teradata.html", step="tipos", bucket=bucket)
 
     if step == "agenda":
@@ -2201,10 +2444,10 @@ def extract_teradata():
                 sid = None
             if not sid or not get_schedule(sid):
                 flash("Escolha um schedule válido ou marque execução única.", "error")
-                return redirect(url_for("extract_teradata", step="agenda"))
+                return redirect(url_for("extract_teradata", step="agenda", resource_id=resource_id_param))
             bucket["run_once"] = False
             bucket["schedule_id"] = sid
-            return redirect(url_for("extract_teradata", step="executar"))
+            return redirect(url_for("extract_teradata", step="executar", resource_id=resource_id_param))
 
         return render_template(
             "extract_teradata.html",
@@ -2228,41 +2471,69 @@ def extract_teradata():
             run_once = bucket.get("run_once", True)
             status = "pending"
             next_run_at = None
+            bucket["next_run_at"] = None
 
             schedule = get_schedule(schedule_id) if schedule_id else None
             if not run_once and schedule:
                 next_run_at = next_run_text(schedule)
                 status = "scheduled"
+                bucket["next_run_at"] = next_run_at
+            
+            resource_name = bucket.get("resource_name") or "Recurso Teradata"
+            resource_id = bucket.get("resource_id")
+            if resource_id:
+                update_extraction_resource(
+                    resource_id,
+                    name=resource_name,
+                    connector="teradata",
+                    extraction_type=extraction_type,
+                    mode=mode,
+                    config=config,
+                    schedule_id=schedule_id,
+                    run_once=run_once,
+                    next_run_at=next_run_at,
+                )
+            else:
+                resource_id = create_extraction_resource(
+                    resource_name,
+                    "teradata",
+                    extraction_type,
+                    mode,
+                    config,
+                    schedule_id=schedule_id,
+                    run_once=run_once,
+                    next_run_at=next_run_at,
+                )
+                bucket["resource_id"] = resource_id
+
+            if action == "save":
+                bucket["result"] = {
+                    "resource_id": resource_id,
+                    "saved_only": True,
+                    "next_run_at": next_run_at,
+                    "status": status,
+                }
+                flash("Recurso salvo. Use Executar para criar um job.", "success")
+                return redirect(url_for("extract_teradata", step="executar", resource_id=resource_id))
 
             job_id = create_extraction_job(
                 "teradata",
                 extraction_type,
                 mode,
                 config,
+                resource_id=resource_id,
                 schedule_id=schedule_id,
-                run_once=run_once,
-                status=status,
-                next_run_at=next_run_at,
+                run_once=True,
+                status="pending",
             )
-
-            if action == "save":
-                bucket["result"] = {
-                    "job_id": job_id,
-                    "saved_only": True,
-                    "next_run_at": next_run_at,
-                    "status": status,
-                }
-                flash("Job salvo. Ele seguirá o schedule selecionado.", "success")
-                return redirect(url_for("extract_teradata", step="executar"))
-
             job = get_job(job_id)
             result = run_extraction_job(job)
-            bucket["result"] = {"job_id": job_id, **result}
+            bucket["result"] = {"job_id": job_id, "resource_id": resource_id, **result}
             flash(
                 "Extração finalizada.",
                 "success" if not result["errors"] else "warning",
             )
-            return redirect(url_for("extract_teradata", step="executar"))
+            return redirect(url_for("extract_teradata", step="executar", resource_id=resource_id))
 
         selected_schedule = None
         if not bucket.get("run_once") and bucket.get("schedule_id"):
@@ -2281,6 +2552,7 @@ def extract_teradata():
                 "type": bucket.get("config", {}).get("connection_type"),
                 "user": bucket.get("config", {}).get("username"),
             },
+            resource_id=bucket.get("resource_id"),
         )
 
     if step == "config":
@@ -2395,7 +2667,8 @@ def delete_schedule(schedule_id):
 def monitor_jobs():
     jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
     schedules = {sched["id"]: sched for sched in get_schedules()}
-    return render_template("jobs.html", jobs=jobs, schedules=schedules, humanize_days=humanize_days)
+    resources = {res["id"]: res for res in get_resources()}
+    return render_template("jobs.html", jobs=jobs, schedules=schedules, resources=resources, humanize_days=humanize_days)
 
 
 @app.route("/jobs/table")
@@ -2403,7 +2676,8 @@ def monitor_jobs():
 def jobs_table_partial():
     jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
     schedules = {sched["id"]: sched for sched in get_schedules()}
-    return render_template("jobs_table.html", jobs=jobs, schedules=schedules, humanize_days=humanize_days)
+    resources = {res["id"]: res for res in get_resources()}
+    return render_template("jobs_table.html", jobs=jobs, schedules=schedules, resources=resources, humanize_days=humanize_days)
 
 
 @app.route("/jobs/<int:job_id>/restart", methods=["POST"])
@@ -2431,6 +2705,8 @@ def edit_job(job_id):
         flash("Job não encontrado.", "error")
         return redirect(url_for("monitor_jobs"))
     flash("Configuração carregada no fluxo de extração.", "info")
+    if job["resource_id"]:
+        return redirect(url_for("extract_teradata", resource_id=job["resource_id"]))
     return redirect(url_for("extract_teradata", job_id=job_id))
 
 
@@ -2445,6 +2721,38 @@ def download_logs(job_id):
     response = app.response_class(content, mimetype="text/plain")
     response.headers["Content-Disposition"] = f"attachment; filename=job_{job_id}_logs.txt"
     return response
+
+
+@app.route("/resources/<int:resource_id>/run", methods=["POST"])
+@login_required
+def run_resource(resource_id):
+    res = get_resource(resource_id)
+    if not res:
+        flash("Recurso não encontrado.", "error")
+        return redirect(url_for("extraction_menu"))
+    job_id = create_extraction_job(
+        res["connector"],
+        res["extraction_type"],
+        res["mode"],
+        {
+            "host": res["host"],
+            "jdbc_url": res["jdbc_url"],
+            "connection_type": res["connection_type"],
+            "database_name": res["database_name"],
+            "password": res["password"],
+            "username": res["username"],
+            "extra_params": res["extra_params"],
+        },
+        resource_id=resource_id,
+        schedule_id=res["schedule_id"],
+    )
+    job = get_job(job_id)
+    result = run_extraction_job(job)
+    flash(
+        "Execução iniciada para o recurso.",
+        "success" if not result.get("errors") else "warning",
+    )
+    return redirect(url_for("monitor_jobs"))
 
 
 @app.route("/usuarios/criar", methods=["POST"])

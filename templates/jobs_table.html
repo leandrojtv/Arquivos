@@ -2,6 +2,7 @@
   <thead>
     <tr>
       <th>ID</th>
+      <th>Resource</th>
       <th>Conector</th>
       <th>Tipo</th>
       <th>Modo</th>
@@ -17,6 +18,7 @@
     {% for job in jobs %}
     <tr>
       <td>#{{ job.id }}</td>
+      <td>{% if job.resource_id and resources.get(job.resource_id) %}{{ resources.get(job.resource_id).name }}{% else %}—{% endif %}</td>
       <td>{{ job.connector }}</td>
       <td>{{ job.extraction_type }}</td>
       <td>{{ job.mode }}</td>

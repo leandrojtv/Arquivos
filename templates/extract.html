@@ -30,5 +30,61 @@
       <span class="pill">Bloqueado</span>
     </div>
   </div>
+  <div class="card table-card">
+    <div class="table-header">
+      <div>
+        <p class="eyebrow">Resources</p>
+        <h3>Configurações salvas</h3>
+        <p class="subtitle">Edite um resource existente ou execute para gerar um novo job.</p>
+      </div>
+      <div class="actions-row">
+        <a class="btn ghost" href="{{ url_for('extract_teradata') }}"><svg class="icon"><use href="#icon-plus"></use></svg><span>Novo resource</span></a>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Conector</th>
+            <th>Modo</th>
+            <th>Schedule</th>
+            <th class="text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if resources %}
+            {% for res in resources %}
+            <tr>
+              <td>{{ res['name'] }}</td>
+              <td>{{ res['connector']|capitalize }}</td>
+              <td>{{ res['mode']|capitalize }}</td>
+              <td>
+                {% if res['run_once'] %}
+                  Único
+                {% elif res['schedule_id'] and schedules.get(res['schedule_id']) %}
+                  {{ schedules[res['schedule_id']]['name'] }}<br>
+                  <span class="muted">Próx: {{ res['next_run_at'] or '—' }}</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <div class="table-actions">
+                  <form method="post" action="{{ url_for('run_resource', resource_id=res['id']) }}" class="inline">
+                    <button type="submit" class="btn ghost"><svg class="icon"><use href="#icon-play"></use></svg><span>Executar</span></button>
+                  </form>
+                  <a class="btn ghost" href="{{ url_for('extract_teradata', resource_id=res['id']) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="5" class="muted">Nenhum resource configurado ainda.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </section>
 {% endblock %}
