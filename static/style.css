@@ -31,18 +31,19 @@ body {
     linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.98));
 }
 
+
 .dashboard-shell {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
   min-height: 100vh;
+  width: 100%;
 }
 
 .dashboard-shell.has-sidebar {
-  grid-template-columns: 1fr;
+  position: relative;
 }
 
 .dashboard-shell.has-sidebar.sidebar-open {
-  grid-template-columns: 1fr;
+  position: relative;
 }
 
 
@@ -54,6 +55,8 @@ body {
   width: 100%;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(247, 249, 253, 0.97));
   border-left: 1px solid rgba(0, 0, 0, 0.04);
+  margin-left: 0;
+  transition: margin-left 0.25s ease;
 }
 
 .page-area {
@@ -85,6 +88,7 @@ body {
   gap: 1rem;
   position: fixed;
   top: 0;
+  left: 0;
   min-height: 100vh;
   transform: translateX(-100%);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -100,29 +104,27 @@ body {
 
 .dashboard-shell.has-sidebar .workspace {
   margin-left: 0;
-  padding-left: 0;
-  transition: padding-left 0.2s ease;
 }
 
 .dashboard-shell.has-sidebar.sidebar-open .workspace {
-  padding-left: 0;
+  margin-left: 280px;
 }
 
 @media (max-width: 1024px) {
-  .dashboard-shell.has-sidebar {
-    grid-template-columns: 1fr;
-  }
-  .dashboard-shell.has-sidebar.sidebar-open {
-    grid-template-columns: 1fr;
-  }
   .dashboard-shell.has-sidebar.sidebar-open .workspace {
-    padding-left: 0;
+    margin-left: 0;
   }
 }
 
 @media (min-width: 1025px) {
-  .dashboard-shell.has-sidebar.sidebar-open .workspace {
-    padding-left: 280px;
+  .sidebar {
+    transform: translateX(0);
+  }
+  .dashboard-shell.has-sidebar .workspace {
+    margin-left: 280px;
+  }
+  .dashboard-shell.has-sidebar:not(.sidebar-open) .workspace {
+    margin-left: 0;
   }
 }
 
@@ -1598,9 +1600,6 @@ table td.compact {
 }
 
 @media (max-width: 1024px) {
-  .dashboard-shell {
-    grid-template-columns: 1fr;
-  }
 
   .hero-main {
     grid-template-columns: 1fr;
@@ -1632,12 +1631,12 @@ table td.compact {
     grid-template-columns: auto 1fr auto;
   }
 
-.main-nav {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-}
+  .main-nav {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
 }
 
 .table-actions {
