@@ -50,11 +50,11 @@
               <svg class="icon"><use href="#icon-menu"></use></svg>
             </button>
             {% endif %}
-          <div class="page-title">
-            <p class="eyebrow">Painel</p>
-            <h1>Cadastro de Bases e Gestores</h1>
-            <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
-          </div>
+            <div class="page-title">
+              <p class="eyebrow">Painel</p>
+              <h1>Cadastro de Bases e Gestores</h1>
+              <p class="subtitle">Registre responsáveis, ambientes e detalhes das bases.</p>
+            </div>
             {% if session.get('user') %}
             <div class="user-menu" tabindex="0">
               <div class="user-trigger">
@@ -72,7 +72,6 @@
             {% else %}
             <a href="{{ url_for('login') }}" class="pill">Login</a>
             {% endif %}
-          </div>
           </div>
         </header>
     {% if session.get('user') %}
