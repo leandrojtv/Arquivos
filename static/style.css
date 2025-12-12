@@ -510,6 +510,14 @@ button.danger {
   margin-top: 1rem;
 }
 
+.detail-card-section {
+  margin-top: 1.5rem;
+}
+
+.detail-card-section .detail-grid {
+  margin-top: 0.75rem;
+}
+
 .detail-tile {
   padding: 1rem;
   border: 1px solid var(--border);

@@ -49,6 +49,24 @@
     </div>
   </div>
 
+  <div class="detail-card-section">
+    <p class="eyebrow">Tamanho do database</p>
+    <div class="detail-grid">
+      <div class="detail-tile">
+        <p class="eyebrow">Uso atual</p>
+        <p class="value">{{ base.current_perm_gb is not none and ('%.2f GB' % base.current_perm_gb) or '—' }}</p>
+      </div>
+      <div class="detail-tile">
+        <p class="eyebrow">Limite</p>
+        <p class="value">{{ base.max_perm_gb is not none and ('%.2f GB' % base.max_perm_gb) or '—' }}</p>
+      </div>
+      <div class="detail-tile">
+        <p class="eyebrow">Espaço livre</p>
+        <p class="value">{{ base.free_space_gb is not none and ('%.2f GB' % base.free_space_gb) or '—' }}</p>
+      </div>
+    </div>
+  </div>
+
   <div class="description-block">
     <p class="eyebrow">Descrição</p>
     <p class="value">{{ base.descricao or 'Nenhuma descrição fornecida.' }}</p>

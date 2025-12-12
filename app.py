@@ -177,6 +177,9 @@ def init_db():
             gestor_id INTEGER NOT NULL,
             substituto1_id INTEGER,
             substituto2_id INTEGER,
+            current_perm_gb REAL,
+            max_perm_gb REAL,
+            free_space_gb REAL,
             source_connector TEXT NOT NULL DEFAULT 'manual',
             source_job_id INTEGER,
             FOREIGN KEY (gestor_id) REFERENCES gestors(id),
@@ -207,6 +210,7 @@ def init_db():
     ensure_default_extractor_gestor()
     migrate_bases_nullable()
     migrate_bases_sources()
+    migrate_base_sizes()
     migrate_extraction_resources()
     migrate_extraction_jobs()
     conn.close()
@@ -272,6 +276,20 @@ def migrate_bases_sources():
         conn.execute("ALTER TABLE bases ADD COLUMN source_connector TEXT NOT NULL DEFAULT 'manual'")
     if "source_job_id" not in names:
         conn.execute("ALTER TABLE bases ADD COLUMN source_job_id INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def migrate_base_sizes():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "current_perm_gb" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN current_perm_gb REAL")
+    if "max_perm_gb" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN max_perm_gb REAL")
+    if "free_space_gb" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN free_space_gb REAL")
     conn.commit()
     conn.close()
 
@@ -996,16 +1014,30 @@ def fetch_teradata_metadata(config):
     try:
         conn, _ = open_teradata_connection(config)
         query = """
-           select d.DatabaseName, d.CommentString
-           FROM DBC.DatabasesV AS d
-           where DBKind = 'D'
+          SELECT
+            d.DatabaseName,
+            COALESCE(d.CommentString, '') AS Description,
+            SUM(ds.CurrentPerm) / (1000 * 1000 * 1000) AS CurrentPerm_GB,
+            SUM(ds.MaxPerm) / (1000 * 1000 * 1000) AS MaxPerm_GB,
+            (SUM(ds.MaxPerm) - SUM(ds.CurrentPerm)) / (1000 * 1000 * 1000) AS FreeSpace_GB
+          FROM DBC.DatabasesV d
+          LEFT JOIN DBC.DiskSpaceV ds ON ds.DatabaseName = d.DatabaseName
+          WHERE d.DBKind = 'D'
+          GROUP BY d.DatabaseName, Description
+          ORDER BY 1
         """
         cur = conn.cursor()
         cur.execute(query)
         rows = cur.fetchall()
         conn.close()
         return [
-            {"DatabaseName": row[0], "CommentString": row[1] if len(row) > 1 else ""}
+            {
+                "DatabaseName": row[0],
+                "CommentString": row[1] if len(row) > 1 else "",
+                "CurrentPerm_GB": row[2] if len(row) > 2 else None,
+                "MaxPerm_GB": row[3] if len(row) > 3 else None,
+                "FreeSpace_GB": row[4] if len(row) > 4 else None,
+            }
             for row in rows
         ], None, None
     except Exception as exc:
@@ -1019,12 +1051,21 @@ def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
     imported = 0
     errors = []
 
+    def to_float(val):
+        try:
+            return float(val) if val not in (None, "") else None
+        except Exception:
+            return None
+
     if mode == "full":
         execute_db("DELETE FROM bases WHERE source_connector = 'teradata'")
 
     for entry in rows:
         name = (entry.get("DatabaseName") or "").strip()
         descricao = (entry.get("CommentString") or "").strip() or None
+        current_perm = to_float(entry.get("CurrentPerm_GB"))
+        max_perm = to_float(entry.get("MaxPerm_GB"))
+        free_space = to_float(entry.get("FreeSpace_GB"))
 
         if not name:
             errors.append("Linha ignorada por falta do nome do database.")
@@ -1040,18 +1081,31 @@ def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
             execute_db(
                 """
                 UPDATE bases
-                SET descricao = ?, gestor_id = ?, source_connector = 'teradata', source_job_id = ?
+                SET descricao = ?, gestor_id = ?, source_connector = 'teradata', source_job_id = ?,
+                    current_perm_gb = ?, max_perm_gb = ?, free_space_gb = ?
                 WHERE id = ?
                 """,
-                (descricao, gestor_id, job_id, record["id"]),
+                (descricao, gestor_id, job_id, current_perm, max_perm, free_space, record["id"]),
             )
         else:
             execute_db(
                 """
-                INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
-                VALUES (?, ?, ?, ?, ?, ?, 'teradata', ?)
+                INSERT INTO bases (
+                    name,
+                    ambiente,
+                    descricao,
+                    gestor_id,
+                    substituto1_id,
+                    substituto2_id,
+                    current_perm_gb,
+                    max_perm_gb,
+                    free_space_gb,
+                    source_connector,
+                    source_job_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'teradata', ?)
                 """,
-                (name, None, descricao, gestor_id, None, None, job_id),
+                (name, None, descricao, gestor_id, None, None, current_perm, max_perm, free_space, job_id),
             )
         imported += 1
 

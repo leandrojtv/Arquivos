@@ -142,7 +142,23 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 2. Clique em **Novo resource** ou em **Editar** para abrir o fluxo do conector **Teradata**.
 3. Na etapa **Conexão**, informe **Nome do resource**, host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`) e escolher o **nível de log** (Error, Warn, Info, Debug ou Verbose) para filtrar o que será registrado nos jobs, semelhante ao log4j.
 4. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo. Se a conexão falhar, nenhum dado de exemplo é aplicado e o job ficará com status de erro.
-5. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que executa a consulta `select d.DatabaseName, d.CommentString from DBC.DatabasesV where DBKind='D'`.
+5. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que agora executa a consulta:
+
+   ```sql
+   SELECT
+     d.DatabaseName,
+     COALESCE(d.CommentString, '') AS Description,
+     SUM(ds.CurrentPerm) / (1000 * 1000 * 1000) AS CurrentPerm_GB,
+     SUM(ds.MaxPerm) / (1000 * 1000 * 1000) AS MaxPerm_GB,
+     (SUM(ds.MaxPerm) - SUM(ds.CurrentPerm)) / (1000 * 1000 * 1000) AS FreeSpace_GB
+   FROM DBC.DatabasesV d
+   LEFT JOIN DBC.DiskSpaceV ds ON ds.DatabaseName = d.DatabaseName
+   WHERE d.DBKind = 'D'
+   GROUP BY d.DatabaseName, Description
+   ORDER BY 1;
+   ```
+
+   Os valores de tamanho são aplicados na base e exibidos no detalhe de cada database.
 6. Em **Agenda**, selecione **Execução única** ou associe um **schedule** existente (criado no menu do usuário) para reaproveitar a programação em outros resources.
 7. Em **Extração**, revise o resumo e clique em **Salvar** para apenas gravar/atualizar o resource (sem criar job) ou **Salvar e executar** para gerar um job imediato vinculado ao resource. As bases são vinculadas automaticamente ao gestor padrão de metadados.
 
