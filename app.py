@@ -211,6 +211,7 @@ def init_db():
             current_perm_gb REAL,
             max_perm_gb REAL,
             free_space_gb REAL,
+            source_resource_id INTEGER,
             source_connector TEXT NOT NULL DEFAULT 'manual',
             source_job_id INTEGER,
             FOREIGN KEY (gestor_id) REFERENCES gestors(id),
@@ -242,6 +243,7 @@ def init_db():
     migrate_bases_nullable()
     migrate_bases_sources()
     migrate_base_sizes()
+    migrate_base_resource_links()
     migrate_extraction_resources()
     migrate_extraction_jobs()
     conn.close()
@@ -321,6 +323,16 @@ def migrate_base_sizes():
         conn.execute("ALTER TABLE bases ADD COLUMN max_perm_gb REAL")
     if "free_space_gb" not in names:
         conn.execute("ALTER TABLE bases ADD COLUMN free_space_gb REAL")
+    conn.commit()
+    conn.close()
+
+
+def migrate_base_resource_links():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "source_resource_id" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN source_resource_id INTEGER")
     conn.commit()
     conn.close()
 
@@ -1109,7 +1121,7 @@ def fetch_teradata_metadata(config):
         return [], None, f"Falha ao extrair metadados: {exc}{extra}" if str(exc) else "Falha ao extrair metadados."
 
 
-def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
+def upsert_bases_from_metadata(rows, mode, job_id, gestor_id, resource_id=None):
     imported = 0
     errors = []
 
@@ -1120,7 +1132,22 @@ def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
             return None
 
     if mode == "full":
-        execute_db("DELETE FROM bases WHERE source_connector = 'teradata'")
+        if resource_id:
+            execute_db(
+                """
+                DELETE FROM bases
+                WHERE source_connector = 'teradata'
+                  AND (
+                    source_resource_id = ?
+                    OR (source_resource_id IS NULL AND source_job_id IN (
+                        SELECT id FROM extraction_jobs WHERE resource_id = ?
+                    ))
+                  )
+                """,
+                (resource_id, resource_id),
+            )
+        else:
+            execute_db("DELETE FROM bases WHERE source_connector = 'teradata'")
 
     for entry in rows:
         name = (entry.get("DatabaseName") or "").strip()
@@ -1133,21 +1160,58 @@ def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
             errors.append("Linha ignorada por falta do nome do database.")
             continue
 
-        existing = query_db("SELECT id, source_connector FROM bases WHERE name = ?", (name,))
+        existing = query_db(
+            "SELECT id, source_connector, source_resource_id FROM bases WHERE name = ?",
+            (name,),
+        )
         if existing:
             record = existing[0]
             if record["source_connector"] not in (None, "teradata"):
                 errors.append(f"Base '{name}' foi criada manualmente/importada e não será sobrescrita.")
                 continue
 
+            try:
+                record_resource = record["source_resource_id"]
+            except Exception:
+                record_resource = record.get("source_resource_id") if isinstance(record, dict) else None
+
+            if record_resource and resource_id and record_resource != resource_id:
+                append_job_log(
+                    job_id,
+                    (
+                        "DEBUG",
+                        f"Base '{name}' pertence a outro recurso e foi mantida sem alterações.",
+                    ),
+                )
+                continue
+
+            if mode == "incremental":
+                append_job_log(
+                    job_id,
+                    (
+                        "DEBUG",
+                        f"Incremental: base '{name}' já existe e foi mantida sem alterações.",
+                    ),
+                )
+                continue
+
             execute_db(
                 """
                 UPDATE bases
                 SET descricao = ?, gestor_id = ?, source_connector = 'teradata', source_job_id = ?,
-                    current_perm_gb = ?, max_perm_gb = ?, free_space_gb = ?
+                    current_perm_gb = ?, max_perm_gb = ?, free_space_gb = ?, source_resource_id = ?
                 WHERE id = ?
                 """,
-                (descricao, gestor_id, job_id, current_perm, max_perm, free_space, record["id"]),
+                (
+                    descricao,
+                    gestor_id,
+                    job_id,
+                    current_perm,
+                    max_perm,
+                    free_space,
+                    resource_id,
+                    record["id"],
+                ),
             )
         else:
             execute_db(
@@ -1162,19 +1226,32 @@ def upsert_bases_from_metadata(rows, mode, job_id, gestor_id):
                     current_perm_gb,
                     max_perm_gb,
                     free_space_gb,
+                    source_resource_id,
                     source_connector,
                     source_job_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'teradata', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'teradata', ?)
                 """,
-                (name, None, descricao, gestor_id, None, None, current_perm, max_perm, free_space, job_id),
+                (
+                    name,
+                    None,
+                    descricao,
+                    gestor_id,
+                    None,
+                    None,
+                    current_perm,
+                    max_perm,
+                    free_space,
+                    resource_id,
+                    job_id,
+                ),
             )
-        imported += 1
+            imported += 1
 
     return imported, errors
 
 
-def run_teradata_job(config, mode, extraction_type, job_id):
+def run_teradata_job(config, mode, extraction_type, job_id, resource_id=None):
     append_job_log(job_id, ("INFO", "Iniciando extração de metadados do Teradata..."), reset=True)
     update_extraction_job(job_id, status="running", progress=10, error=None)
 
@@ -1195,7 +1272,7 @@ def run_teradata_job(config, mode, extraction_type, job_id):
     update_extraction_job(job_id, progress=40)
 
     gestor_id = ensure_default_extractor_gestor()
-    imported, errors = upsert_bases_from_metadata(rows, mode, job_id, gestor_id)
+    imported, errors = upsert_bases_from_metadata(rows, mode, job_id, gestor_id, resource_id)
 
     progress = 100 if rows else 0
     status = "success" if not errors else "completed"
@@ -1271,10 +1348,22 @@ def finalize_next_run(job_id, job):
 def run_extraction_job(job):
     job_id = job["id"] if isinstance(job, dict) or hasattr(job, "__getitem__") else job
     job_row = job if isinstance(job, dict) else get_job(job_id)
+
+    def jval(key):
+        try:
+            return job_row[key]
+        except Exception:
+            return job_row.get(key) if isinstance(job_row, dict) else None
     config = job_to_config(job_row)
     update_extraction_job(job_row["id"], status="running", progress=0, error=None)
     try:
-        result = run_teradata_job(config, job_row["mode"], job_row["extraction_type"], job_row["id"])
+        result = run_teradata_job(
+            config,
+            job_row["mode"],
+            job_row["extraction_type"],
+            job_row["id"],
+            jval("resource_id"),
+        )
     except Exception as exc:  # pragma: no cover - runtime guardrail
         append_job_log(job_row["id"], ("ERROR", f"Erro inesperado: {exc}"))
         update_extraction_job(job_row["id"], status="failed", progress=0, error=str(exc))
