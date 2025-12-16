@@ -1436,6 +1436,7 @@ def reports():
         LEFT JOIN gestors g ON g.id = b.gestor_id
         GROUP BY label
         ORDER BY total DESC, label ASC
+        LIMIT 10
         """
     )
     coord_rows = query_db(
@@ -1458,7 +1459,7 @@ def reports():
 
     data = {
         "total_gestors": query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"],
-        "total_bases": sum((row["total"] or 0) for row in coverage_rows),
+        "total_bases": query_db("SELECT COUNT(*) as total FROM bases")[0]["total"],
         "coverage_labels": [row["label"] or "Sem gestor" for row in coverage_rows],
         "coverage_values": [row["total"] for row in coverage_rows],
         "coord_labels": [row["label"] or "Sem coordenação" for row in coord_rows],

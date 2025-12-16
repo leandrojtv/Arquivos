@@ -39,7 +39,7 @@
     <div class="card-header">
       <div>
         <p class="eyebrow">Cobertura</p>
-        <h3>Bases por gestor</h3>
+        <h3>Bases por gestor (Top 10)</h3>
       </div>
       <div class="card-actions">
         <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
@@ -97,6 +97,7 @@
   const envValues = {{ env_values|tojson }};
 
   const palette = ["#0f6fed", "#7cc4ff", "#36a3f7", "#9dd5ff", "#1d9bf0", "#74a9f2", "#b7d8ff", "#5090ea"];
+  const envPalette = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#a855f7", "#06b6d4", "#f97316", "#14b8a6", "#6366f1", "#84cc16"];
   const muted = "#cbd5e1";
 
   const renderChart = (ctxId, config) => {
@@ -216,26 +217,24 @@
   };
 
   renderChart("coverageChart", {
-    type: "doughnut",
+    type: "bar",
     data: {
       labels: coverageLabels,
       datasets: [
         {
+          label: "Bases",
           data: coverageValues,
           backgroundColor: coverageLabels.map((_, idx) => palette[idx % palette.length]),
-          borderWidth: 0,
+          borderRadius: 10,
         },
       ],
     },
     options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: { usePointStyle: true },
-        },
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, precision: 0 },
       },
-      cutout: "60%",
+      plugins: { legend: { display: false } },
     },
   });
 
@@ -262,24 +261,26 @@
   });
 
   renderChart("envChart", {
-    type: "bar",
+    type: "doughnut",
     data: {
       labels: envLabels,
       datasets: [
         {
-          label: "Bases",
           data: envValues,
-          backgroundColor: envLabels.map((_, idx) => palette[(idx + 2) % palette.length]),
-          borderRadius: 10,
+          backgroundColor: envLabels.map((_, idx) => envPalette[idx % envPalette.length]),
+          borderWidth: 0,
         },
       ],
     },
     options: {
-      scales: {
-        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
-        y: { beginAtZero: true, precision: 0 },
+      responsive: true,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { usePointStyle: true },
+        },
       },
-      plugins: { legend: { display: false } },
+      cutout: "55%",
     },
   });
 
