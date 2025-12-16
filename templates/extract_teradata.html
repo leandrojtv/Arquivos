@@ -119,6 +119,20 @@
         </label>
       </div>
     </div>
+    <div class="card inset">
+      <p class="eyebrow">Filtros por nome do database</p>
+      <p class="form-helper">Use curingas para restringir a extração. Separe múltiplos filtros por vírgula. Exemplos de inclusão: <code>P_*</code>, <code>*_Datalab</code>. Exemplos de exclusão: <code>TD_*</code>, <code>SYS*</code>.</p>
+      <div class="grid-two">
+        <div>
+          <label for="include_filters">Incluir (LIKE com wildcards)</label>
+          <input type="text" id="include_filters" name="include_filters" value="{{ bucket.get('include_filters','') }}" placeholder="P_*, *_Datalab" />
+        </div>
+        <div>
+          <label for="exclude_filters">Excluir</label>
+          <input type="text" id="exclude_filters" name="exclude_filters" value="{{ bucket.get('exclude_filters','') }}" placeholder="TD_*, SYS*" />
+        </div>
+      </div>
+    </div>
     <div class="actions-inline">
       <a class="button ghost" href="{{ url_for('extract_teradata') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
       <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Continuar</span></button>
@@ -193,6 +207,8 @@
           <div><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</div>
           <div><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</div>
           <div><strong>Log:</strong> {{ bucket.get('log_level','INFO') }}</div>
+          <div><strong>Incluir DBs:</strong> {{ bucket.get('include_filters') or '—' }}</div>
+          <div><strong>Excluir DBs:</strong> {{ bucket.get('exclude_filters') or '—' }}</div>
         </div>
         <div class="card inset schedule-callout">
           <div class="badge">Schedule</div>

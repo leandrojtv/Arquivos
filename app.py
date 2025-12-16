@@ -83,6 +83,33 @@ def normalize_wildcard(term: str):
     return joined
 
 
+def normalize_filter_patterns(raw):
+    """Normaliza padrões de include/exclude (com * ou ?) para uso em SQL LIKE."""
+    if not raw:
+        return []
+    if isinstance(raw, (list, tuple)):
+        parts = raw
+    else:
+        parts = str(raw).replace(";", ",").split(",")
+    normalized = []
+    for part in parts:
+        text = str(part).strip()
+        if not text:
+            continue
+        buff = []
+        for ch in text:
+            if ch == "*":
+                buff.append("%")
+            elif ch == "?":
+                buff.append("_")
+            elif ch in ("%", "_"):
+                buff.append(f"\\{ch}")
+            else:
+                buff.append(ch)
+        normalized.append("".join(buff))
+    return normalized
+
+
 def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -106,6 +133,8 @@ def init_db():
             extraction_type TEXT NOT NULL,
             mode TEXT NOT NULL,
             log_level TEXT DEFAULT 'INFO',
+            include_filters TEXT,
+            exclude_filters TEXT,
             host TEXT,
             jdbc_url TEXT,
             connection_type TEXT,
@@ -136,6 +165,8 @@ def init_db():
             extraction_type TEXT NOT NULL,
             mode TEXT NOT NULL,
             log_level TEXT DEFAULT 'INFO',
+            include_filters TEXT,
+            exclude_filters TEXT,
             host TEXT,
             jdbc_url TEXT,
             connection_type TEXT,
@@ -315,6 +346,10 @@ def migrate_extraction_jobs():
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN last_run_at TEXT")
     if columns and "resource_id" not in names:
         conn.execute("ALTER TABLE extraction_jobs ADD COLUMN resource_id INTEGER")
+    if columns and "include_filters" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN include_filters TEXT")
+    if columns and "exclude_filters" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN exclude_filters TEXT")
     conn.commit()
     conn.close()
 
@@ -336,9 +371,9 @@ def migrate_extraction_resources():
         cur = conn.execute(
             """
             INSERT INTO extraction_resources (
-                name, connector, extraction_type, mode, log_level, host, jdbc_url, connection_type, database_name,
+                name, connector, extraction_type, mode, log_level, include_filters, exclude_filters, host, jdbc_url, connection_type, database_name,
                 password, username, extra_params, schedule_id, run_once, next_run_at, last_run_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name_hint,
@@ -346,6 +381,8 @@ def migrate_extraction_resources():
                 job["extraction_type"],
                 job["mode"],
                 job["log_level"] if "log_level" in job.keys() else "INFO",
+                job["include_filters"] if "include_filters" in job.keys() else None,
+                job["exclude_filters"] if "exclude_filters" in job.keys() else None,
                 job["host"],
                 job["jdbc_url"],
                 job["connection_type"],
@@ -544,6 +581,8 @@ def create_extraction_job(
     mode,
     config,
     log_level="INFO",
+    include_filters=None,
+    exclude_filters=None,
     resource_id=None,
     schedule_id=None,
     run_once=True,
@@ -553,8 +592,8 @@ def create_extraction_job(
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO extraction_jobs (resource_id, connector, extraction_type, mode, log_level, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO extraction_jobs (resource_id, connector, extraction_type, mode, log_level, include_filters, exclude_filters, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             resource_id,
@@ -562,6 +601,8 @@ def create_extraction_job(
             extraction_type,
             mode,
             log_level,
+            include_filters,
+            exclude_filters,
             config.get("host"),
             config.get("jdbc_url"),
             config.get("connection_type"),
@@ -587,9 +628,9 @@ def create_extraction_resource(name, connector, extraction_type, mode, config, s
     cur = conn.execute(
         """
         INSERT INTO extraction_resources (
-            name, connector, extraction_type, mode, log_level, host, jdbc_url, connection_type, database_name, password, username, extra_params,
+            name, connector, extraction_type, mode, log_level, include_filters, exclude_filters, host, jdbc_url, connection_type, database_name, password, username, extra_params,
             schedule_id, run_once, next_run_at, last_run_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -597,6 +638,8 @@ def create_extraction_resource(name, connector, extraction_type, mode, config, s
             extraction_type,
             mode,
             log_level,
+            config.get("include_filters"),
+            config.get("exclude_filters"),
             config.get("host"),
             config.get("jdbc_url"),
             config.get("connection_type"),
@@ -638,6 +681,8 @@ def update_extraction_resource(resource_id, *, name=None, connector=None, extrac
     if config is not None:
         sets.extend(
             [
+                "include_filters = ?",
+                "exclude_filters = ?",
                 "host = ?",
                 "jdbc_url = ?",
                 "connection_type = ?",
@@ -649,6 +694,8 @@ def update_extraction_resource(resource_id, *, name=None, connector=None, extrac
         )
         params.extend(
             [
+                config.get("include_filters"),
+                config.get("exclude_filters"),
                 config.get("host"),
                 config.get("jdbc_url"),
                 config.get("connection_type"),
@@ -687,6 +734,7 @@ def update_extraction_job(
     last_run_at=None,
     run_once=None,
     log_level=None,
+    config=None,
 ):
     conn = sqlite3.connect(DB_PATH)
     sets = []
@@ -706,6 +754,9 @@ def update_extraction_job(
     if log_level is not None:
         sets.append("log_level = ?")
         params.append(log_level)
+    if config is not None:
+        sets.extend(["include_filters = ?", "exclude_filters = ?"])
+        params.extend([config.get("include_filters"), config.get("exclude_filters")])
     if next_run_at is not None:
         sets.append("next_run_at = ?")
         params.append(next_run_at)
@@ -1013,6 +1064,17 @@ def test_teradata_connection(config):
 def fetch_teradata_metadata(config):
     try:
         conn, _ = open_teradata_connection(config)
+        includes = normalize_filter_patterns(config.get("include_filters"))
+        excludes = normalize_filter_patterns(config.get("exclude_filters"))
+        filters = ["d.DBKind = 'D'"]
+        params = []
+        if includes:
+            filters.append("(" + " OR ".join(["d.DatabaseName LIKE ? ESCAPE '\\'"] * len(includes)) + ")")
+            params.extend(includes)
+        if excludes:
+            filters.extend(["d.DatabaseName NOT LIKE ? ESCAPE '\\'"] * len(excludes))
+            params.extend(excludes)
+        where_clause = " AND ".join(filters)
         query = """
           SELECT
             d.DatabaseName,
@@ -1022,12 +1084,12 @@ def fetch_teradata_metadata(config):
             (SUM(ds.MaxPerm) - SUM(ds.CurrentPerm)) / (1000 * 1000 * 1000) AS FreeSpace_GB
           FROM DBC.DatabasesV d
           LEFT JOIN DBC.DiskSpaceV ds ON ds.DatabaseName = d.DatabaseName
-          WHERE d.DBKind = 'D'
+          WHERE {where_clause}
           GROUP BY d.DatabaseName, Description
           ORDER BY 1
         """
         cur = conn.cursor()
-        cur.execute(query)
+        cur.execute(query.format(where_clause=where_clause), params)
         rows = cur.fetchall()
         conn.close()
         return [
@@ -1169,6 +1231,8 @@ def job_to_config(job):
         "username": val("username"),
         "password": val("password"),
         "extra_params": val("extra_params"),
+        "include_filters": val("include_filters"),
+        "exclude_filters": val("exclude_filters"),
     }
 
 
@@ -1250,8 +1314,12 @@ def dispatch_due_jobs():
                 "password": res["password"],
                 "username": res["username"],
                 "extra_params": res["extra_params"],
+                "include_filters": res["include_filters"] if "include_filters" in res.keys() else None,
+                "exclude_filters": res["exclude_filters"] if "exclude_filters" in res.keys() else None,
             },
             log_level=res["log_level"] if "log_level" in res.keys() else "INFO",
+            include_filters=res["include_filters"] if "include_filters" in res.keys() else None,
+            exclude_filters=res["exclude_filters"] if "exclude_filters" in res.keys() else None,
             resource_id=res["id"],
             schedule_id=res["schedule_id"],
             run_once=True,
@@ -2444,6 +2512,8 @@ def prefill_from_job(job_id, bucket):
     bucket["schedule_id"] = job["schedule_id"]
     bucket["run_once"] = bool(job["run_once"]) if job["run_once"] is not None else True
     bucket["log_level"] = (job["log_level"] or "INFO") if "log_level" in job.keys() else "INFO"
+    bucket["include_filters"] = job["include_filters"] if "include_filters" in job.keys() else ""
+    bucket["exclude_filters"] = job["exclude_filters"] if "exclude_filters" in job.keys() else ""
 
 
 def prefill_from_resource(resource_id, bucket):
@@ -2467,6 +2537,8 @@ def prefill_from_resource(resource_id, bucket):
     bucket["run_once"] = bool(res["run_once"]) if res["run_once"] is not None else True
     bucket["next_run_at"] = res["next_run_at"]
     bucket["log_level"] = (res["log_level"] or "INFO") if "log_level" in res.keys() else "INFO"
+    bucket["include_filters"] = res["include_filters"] if "include_filters" in res.keys() else ""
+    bucket["exclude_filters"] = res["exclude_filters"] if "exclude_filters" in res.keys() else ""
 
 
 @app.route("/extracao/teradata", methods=["GET", "POST"])
@@ -2534,6 +2606,8 @@ def extract_teradata():
         if request.method == "POST":
             bucket["extraction_type"] = request.form.get("extraction_type", "metadata")
             bucket["mode"] = request.form.get("mode", "incremental")
+            bucket["include_filters"] = request.form.get("include_filters", "").strip()
+            bucket["exclude_filters"] = request.form.get("exclude_filters", "").strip()
             return redirect(url_for("extract_teradata", step="agenda", resource_id=resource_id_param))
         return render_template("extract_teradata.html", step="tipos", bucket=bucket)
 
@@ -2577,7 +2651,11 @@ def extract_teradata():
 
         if request.method == "POST":
             action = request.form.get("action", "execute")
-            config = bucket.get("config", {})
+            config = {
+                **bucket.get("config", {}),
+                "include_filters": bucket.get("include_filters", ""),
+                "exclude_filters": bucket.get("exclude_filters", ""),
+            }
             extraction_type = bucket.get("extraction_type", "metadata")
             mode = bucket.get("mode", "incremental")
             schedule_id = bucket.get("schedule_id")
@@ -2637,6 +2715,8 @@ def extract_teradata():
                 mode,
                 config,
                 log_level=bucket.get("log_level", "INFO"),
+                include_filters=bucket.get("include_filters", ""),
+                exclude_filters=bucket.get("exclude_filters", ""),
                 resource_id=resource_id,
                 schedule_id=schedule_id,
                 run_once=True,
@@ -2858,8 +2938,12 @@ def run_resource(resource_id):
             "password": res["password"],
             "username": res["username"],
             "extra_params": res["extra_params"],
+            "include_filters": res["include_filters"] if "include_filters" in res.keys() else None,
+            "exclude_filters": res["exclude_filters"] if "exclude_filters" in res.keys() else None,
         },
         log_level=res["log_level"] if "log_level" in res.keys() else "INFO",
+        include_filters=res["include_filters"] if "include_filters" in res.keys() else None,
+        exclude_filters=res["exclude_filters"] if "exclude_filters" in res.keys() else None,
         resource_id=resource_id,
         schedule_id=res["schedule_id"],
     )

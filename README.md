@@ -142,7 +142,7 @@ Use este fluxo quando as bases já estiverem cadastradas (por exemplo, via extra
 2. Clique em **Novo resource** ou em **Editar** para abrir o fluxo do conector **Teradata**.
 3. Na etapa **Conexão**, informe **Nome do resource**, host, banco, tipo (TD2/LDAP), usuário e senha ou cole a string JDBC completa. É possível adicionar parâmetros extras (ex.: `DBS_PORT=1025`) e escolher o **nível de log** (Error, Warn, Info, Debug ou Verbose) para filtrar o que será registrado nos jobs, semelhante ao log4j.
 4. Utilize **Testar conexão** para validar rapidamente a string. Caso o driver JDBC não esteja disponível no ambiente, o teste retornará o motivo. Se a conexão falhar, nenhum dado de exemplo é aplicado e o job ficará com status de erro.
-5. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). O tipo atual disponível é **Metadados**, que agora executa a consulta:
+5. Avance para **Tipo** e escolha o modo **Incremental** (atualiza/aplica apenas diferenças) ou **Completa** (remove bases importadas anteriormente do Teradata antes de recarregar). No mesmo passo você pode incluir filtros de **inclusão** e **exclusão** por nome do database usando curingas (`*` e `?`), por exemplo `P_*` ou `*_Datalab` para incluir e `TD_*`, `SYS*` para ignorar. O tipo atual disponível é **Metadados**, que agora executa a consulta base (com os filtros aplicados sobre `DatabaseName`):
 
    ```sql
    SELECT
