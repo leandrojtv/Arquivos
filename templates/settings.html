@@ -39,8 +39,8 @@
           <tr>
             <td>{{ user['username'] }}</td>
             <td>
-              <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form">
-                <input type="password" name="password" placeholder="Nova senha" required />
+              <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
+                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" />
                 <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
               </form>
             </td>

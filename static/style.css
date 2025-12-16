@@ -457,6 +457,20 @@ button:hover,
   margin-bottom: 0;
 }
 
+.inline-form.stacked {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.inline-form.stacked .wide-input {
+  flex: 1 1 180px;
+  min-width: 180px;
+}
+
+.inline-form.stacked.sm-row {
+  gap: 0.35rem;
+}
+
 .stacked {
   display: flex;
   flex-direction: column;
