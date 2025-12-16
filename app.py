@@ -1665,17 +1665,9 @@ def ensure_gestor_exists(gestor_id, field_label):
 @app.route("/bases")
 @login_required
 def list_bases():
-    records = query_db(
-        """
-        SELECT b.*, g.name as gestor_name, gs1.name as sub1_name, gs2.name as sub2_name
-        FROM bases b
-        LEFT JOIN gestors g ON g.id = b.gestor_id
-        LEFT JOIN gestors gs1 ON gs1.id = b.substituto1_id
-        LEFT JOIN gestors gs2 ON gs2.id = b.substituto2_id
-        ORDER BY b.id DESC
-        """
-    )
-    return render_template("bases.html", bases=records)
+    query = request.args.get("q", "").strip()
+    records = get_filtered_bases(query, "", "", "", "", "")
+    return render_template("bases.html", bases=records, query=query)
 
 
 @app.route("/bases/<int:base_id>")
