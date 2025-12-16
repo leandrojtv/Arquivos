@@ -192,6 +192,7 @@
 
         // Navegação em abas no menu retrátil
         const tabsKey = 'app-open-tabs';
+        const homeUrl = "{{ url_for('landing') }}";
         const drawer = document.getElementById('tabDrawer');
         const drawerList = document.getElementById('tabDrawerList');
         const getPageTitle = () => document.body.dataset.pageTitle || document.title;
@@ -240,13 +241,22 @@
           renderTabs();
         };
 
-        const syncCurrentTab = () => addTab(getPageTitle(), getPageUrl());
+        const syncCurrentTab = () => {
+          const url = getPageUrl();
+          if (url === homeUrl) {
+            // Não manter aba fixa para Início
+            return;
+          }
+          addTab(getPageTitle(), url);
+        };
 
         const wireNavLinks = () => {
           document.querySelectorAll('.sidebar a, .user-dropdown a').forEach((link) => {
             link.addEventListener('click', () => {
               const title = link.textContent.trim() || link.getAttribute('aria-label') || 'Página';
-              addTab(title, link.getAttribute('href'));
+              const href = link.getAttribute('href');
+              if (href === homeUrl) return;
+              addTab(title, href);
             });
           });
         };

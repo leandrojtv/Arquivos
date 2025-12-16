@@ -85,6 +85,7 @@ body {
   height: 100vh;
   position: sticky;
   top: 0;
+  overflow-y: auto;
 }
 
 @media (max-width: 1024px) {
@@ -1685,6 +1686,8 @@ table td.compact {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  max-height: 30vh;
+  overflow-y: auto;
 }
 
 .tab-pill {
