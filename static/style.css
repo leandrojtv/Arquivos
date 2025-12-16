@@ -1666,6 +1666,64 @@ table td.compact {
   height: 1rem;
 }
 
+.tab-drawer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tab-drawer .drawer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.tab-drawer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.6rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.tab-pill a {
+  color: #0f172a;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.tab-pill a.active {
+  color: #2563eb;
+}
+
+.tab-pill .icon-button {
+  padding: 0.2rem;
+}
+
+.tab-drawer.open {
+  position: relative;
+}
+
+.tab-drawer:not(.open) .tab-drawer-list {
+  display: none;
+}
+
 @media (max-width: 640px) {
   header h1 {
     font-size: 1.25rem;

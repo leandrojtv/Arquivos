@@ -6,7 +6,7 @@
     <title>{% block title %}Gestão de Bases e Gestores{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
-  <body class="app-shell">
+  <body class="app-shell" data-page-title="{{ self.title()|striptags }}" data-page-url="{{ request.path }}">
     <div class="dashboard-shell {% if session.get('user') %}has-sidebar sidebar-open{% endif %}">
       {% if session.get('user') %}
       <aside class="sidebar" id="sidebar">
@@ -74,6 +74,15 @@
             {% endif %}
           </div>
         </header>
+        {% if session.get('user') %}
+        <div class="tab-drawer" id="tabDrawer" aria-label="Páginas abertas">
+          <button class="icon-button ghost drawer-toggle" type="button" aria-expanded="false" aria-controls="tabDrawerList">
+            <svg class="icon"><use href="#icon-tabs"></use></svg>
+            <span class="toggle-text">Abrir abas</span>
+          </button>
+          <div class="tab-drawer-list" id="tabDrawerList"></div>
+        </div>
+        {% endif %}
     {% if session.get('user') %}
     <div class="modal-overlay" id="novo-modal" aria-hidden="true">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="novo-title">
@@ -182,6 +191,83 @@
             setSidebarState(false);
           });
         });
+
+        // Navegação em abas no menu retrátil
+        const tabsKey = 'app-open-tabs';
+        const drawer = document.getElementById('tabDrawer');
+        const drawerList = document.getElementById('tabDrawerList');
+        const drawerToggle = drawer?.querySelector('.drawer-toggle');
+        const getPageTitle = () => document.body.dataset.pageTitle || document.title;
+        const getPageUrl = () => document.body.dataset.pageUrl || window.location.pathname;
+
+        const loadTabs = () => {
+          try { return JSON.parse(localStorage.getItem(tabsKey) || '[]'); } catch { return []; }
+        };
+        const saveTabs = (tabs) => localStorage.setItem(tabsKey, JSON.stringify(tabs));
+
+        const renderTabs = () => {
+          if (!drawerList) return;
+          drawerList.innerHTML = '';
+          loadTabs().forEach((tab) => {
+            const item = document.createElement('div');
+            item.className = 'tab-pill';
+            const link = document.createElement('a');
+            link.href = tab.url;
+            link.textContent = tab.title || 'Página';
+            if (tab.url === getPageUrl()) link.classList.add('active');
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'icon-button ghost';
+            closeBtn.setAttribute('aria-label', `Fechar ${tab.title || 'aba'}`);
+            closeBtn.innerHTML = '<svg class="icon"><use href="#icon-close"></use></svg>';
+            closeBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const remaining = loadTabs().filter((t) => t.url !== tab.url);
+              saveTabs(remaining);
+              renderTabs();
+            });
+            item.appendChild(link);
+            item.appendChild(closeBtn);
+            drawerList.appendChild(item);
+          });
+        };
+
+        const addTab = (title, url) => {
+          if (!title || !url) return;
+          const tabs = loadTabs();
+          if (!tabs.find((t) => t.url === url)) {
+            tabs.push({ title, url });
+            saveTabs(tabs);
+          }
+          renderTabs();
+        };
+
+        const syncCurrentTab = () => addTab(getPageTitle(), getPageUrl());
+
+        const wireNavLinks = () => {
+          document.querySelectorAll('.sidebar a, .user-dropdown a').forEach((link) => {
+            link.addEventListener('click', () => {
+              const title = link.textContent.trim() || link.getAttribute('aria-label') || 'Página';
+              addTab(title, link.getAttribute('href'));
+            });
+          });
+        };
+
+        const setupDrawerToggle = () => {
+          if (!drawer || !drawerToggle) return;
+          drawerToggle.addEventListener('click', () => {
+            const open = drawer.classList.toggle('open');
+            drawerToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            const label = drawerToggle.querySelector('.toggle-text');
+            if (label) label.textContent = open ? 'Fechar abas' : 'Abrir abas';
+          });
+        };
+
+        syncCurrentTab();
+        renderTabs();
+        wireNavLinks();
+        setupDrawerToggle();
     </script>
     {% endif %}
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -269,6 +355,10 @@
         <path d="M6 4h10l4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>
         <path d="M12 4v6"/>
         <rect x="8" y="14" width="8" height="6" rx="1"/>
+      </symbol>
+      <symbol id="icon-tabs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="5" width="14" height="14" rx="2"/>
+        <path d="M7 5V3h14v12h-2"/>
       </symbol>
       <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="m5.5 12 4 4L18.5 7"/>
