@@ -36,6 +36,13 @@
           <a class="button nav-button ghost" href="{{ url_for('reports') }}"><svg class="icon"><use href="#icon-chart"></use></svg><span>Relatórios</span></a>
           <a class="button nav-button ghost" href="{{ url_for('extraction_menu') }}"><svg class="icon"><use href="#icon-satellite"></use></svg><span>Extração</span></a>
         </nav>
+        <div class="tab-drawer" id="tabDrawer" aria-label="Páginas abertas">
+          <div class="tab-drawer-header">
+            <svg class="icon"><use href="#icon-tabs"></use></svg>
+            <span>Abas abertas</span>
+          </div>
+          <div class="tab-drawer-list" id="tabDrawerList"></div>
+        </div>
         <div class="sidebar-footer">
           <p class="muted">Layout inspirado no template Vue.js admin da Cruip.</p>
         </div>
@@ -74,15 +81,6 @@
             {% endif %}
           </div>
         </header>
-        {% if session.get('user') %}
-        <div class="tab-drawer" id="tabDrawer" aria-label="Páginas abertas">
-          <button class="icon-button ghost drawer-toggle" type="button" aria-expanded="false" aria-controls="tabDrawerList">
-            <svg class="icon"><use href="#icon-tabs"></use></svg>
-            <span class="toggle-text">Abrir abas</span>
-          </button>
-          <div class="tab-drawer-list" id="tabDrawerList"></div>
-        </div>
-        {% endif %}
     {% if session.get('user') %}
     <div class="modal-overlay" id="novo-modal" aria-hidden="true">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="novo-title">
@@ -196,7 +194,6 @@
         const tabsKey = 'app-open-tabs';
         const drawer = document.getElementById('tabDrawer');
         const drawerList = document.getElementById('tabDrawerList');
-        const drawerToggle = drawer?.querySelector('.drawer-toggle');
         const getPageTitle = () => document.body.dataset.pageTitle || document.title;
         const getPageUrl = () => document.body.dataset.pageUrl || window.location.pathname;
 
@@ -254,20 +251,9 @@
           });
         };
 
-        const setupDrawerToggle = () => {
-          if (!drawer || !drawerToggle) return;
-          drawerToggle.addEventListener('click', () => {
-            const open = drawer.classList.toggle('open');
-            drawerToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            const label = drawerToggle.querySelector('.toggle-text');
-            if (label) label.textContent = open ? 'Fechar abas' : 'Abrir abas';
-          });
-        };
-
         syncCurrentTab();
         renderTabs();
         wireNavLinks();
-        setupDrawerToggle();
     </script>
     {% endif %}
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">

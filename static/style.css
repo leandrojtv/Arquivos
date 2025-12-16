@@ -1667,45 +1667,46 @@ table td.compact {
 }
 
 .tab-drawer {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  margin: 1rem 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
 }
 
-.tab-drawer .drawer-toggle {
-  display: inline-flex;
+.tab-drawer-header {
+  display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.65rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  background: #fff;
+  gap: 0.5rem;
+  color: #475569;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
 }
 
 .tab-drawer-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .tab-pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.25rem;
-  padding: 0.35rem 0.6rem;
+  padding: 0.35rem 0.55rem;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .tab-pill a {
   color: #0f172a;
   text-decoration: none;
   font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tab-pill a.active {
@@ -1713,15 +1714,7 @@ table td.compact {
 }
 
 .tab-pill .icon-button {
-  padding: 0.2rem;
-}
-
-.tab-drawer.open {
-  position: relative;
-}
-
-.tab-drawer:not(.open) .tab-drawer-list {
-  display: none;
+  padding: 0.1rem;
 }
 
 @media (max-width: 640px) {
