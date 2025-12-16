@@ -1518,6 +1518,12 @@ def landing():
 @app.route("/relatorios")
 @login_required
 def reports():
+    def first_name_label(raw_label: str, limit: int = 12) -> str:
+        if not raw_label:
+            return "Sem gestor"
+        first = raw_label.strip().split(" ", 1)[0]
+        return (first[: limit - 1] + "…") if len(first) > limit else first
+
     coverage_rows = query_db(
         """
         SELECT COALESCE(NULLIF(TRIM(g.name), ''), 'Sem gestor') AS label, COUNT(*) AS total
@@ -1549,7 +1555,7 @@ def reports():
     data = {
         "total_gestors": query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"],
         "total_bases": query_db("SELECT COUNT(*) as total FROM bases")[0]["total"],
-        "coverage_labels": [row["label"] or "Sem gestor" for row in coverage_rows],
+        "coverage_labels": [first_name_label(row["label"]) for row in coverage_rows],
         "coverage_values": [row["total"] for row in coverage_rows],
         "coord_labels": [row["label"] or "Sem coordenação" for row in coord_rows],
         "coord_values": [row["total"] for row in coord_rows],
