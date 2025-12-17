@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Importar dados{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Importações</p>
+      <h2>Escolha o que deseja importar</h2>
+      <p class="subtitle">Cada tipo de dado possui seu próprio fluxo de importação.</p>
+    </div>
+  </div>
+  <div class="grid-two">
+    <a class="card action-card" href="{{ url_for('import_gestors_flow') }}">
+      <div class="icon-circle"><svg class="icon"><use href="#icon-upload"></use></svg></div>
+      <div>
+        <p class="eyebrow">Gestores</p>
+        <h3>Importar gestores</h3>
+        <p>Fluxo guiado em etapas com mapeamento de colunas e acompanhamento do progresso.</p>
+      </div>
+      <span class="pill">CSV / XLSX</span>
+    </a>
+    <a class="card action-card" href="{{ url_for('import_bases_flow') }}">
+      <div class="icon-circle"><svg class="icon"><use href="#icon-database"></use></svg></div>
+      <div>
+        <p class="eyebrow">Bases</p>
+        <h3>Importar bases</h3>
+        <p>Importação em fluxo com titular obrigatório, substitutos opcionais e vínculo automático pelo nome do gestor.</p>
+      </div>
+      <span class="pill">CSV / XLSX</span>
+    </a>
+    <a class="card action-card" href="{{ url_for('import_relationships_flow') }}">
+      <div class="icon-circle"><svg class="icon"><use href="#icon-link"></use></svg></div>
+      <div>
+        <p class="eyebrow">Relacionamentos</p>
+        <h3>Vincular bases e gestores</h3>
+        <p>Atualize apenas os vínculos titulares e substitutos usando planilhas com nomes de bases e gestores já existentes.</p>
+      </div>
+      <span class="pill">CSV / XLSX</span>
+    </a>
+  </div>
+</section>
+{% endblock %}

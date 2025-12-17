@@ -1,0 +1,60 @@
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Resource</th>
+      <th>Conector</th>
+      <th>Tipo</th>
+      <th>Modo</th>
+      <th>Agenda</th>
+      <th>Próxima execução</th>
+      <th>Status</th>
+      <th>Progresso</th>
+      <th>Erro</th>
+      <th>Atualizado</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for job in jobs %}
+    <tr>
+      <td>#{{ job.id }}</td>
+      <td>{% if job.resource_id and resources.get(job.resource_id) %}{{ resources.get(job.resource_id).name }}{% else %}—{% endif %}</td>
+      <td>{{ job.connector }}</td>
+      <td>{{ job.extraction_type }}</td>
+      <td>{{ job.mode }}</td>
+      <td>
+        {% if job.run_once %}
+        Execução única
+        {% elif schedules.get(job.schedule_id) %}
+        {{ schedules.get(job.schedule_id).name }} · {{ humanize_days(schedules.get(job.schedule_id).days_of_week) }}
+        {% else %}
+        —
+        {% endif %}
+      </td>
+      <td>{{ job.next_run_at or '—' }}</td>
+      <td>{{ job.status }}</td>
+      <td>
+        <div class="progress mini"><div class="progress-bar" style="width: {{ job.progress }}%"></div></div>
+        <small>{{ job.progress }}%</small>
+      </td>
+      <td title="{{ job.error or '' }}">
+        {% if job.error %}
+          {{ job.error[:120] }}{% if job.error|length > 120 %}…{% endif %}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>{{ job.updated_at }}</td>
+      <td class="actions-inline">
+        <div class="table-actions compact">
+          <a class="button" href="{{ url_for('edit_job', job_id=job.id) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
+          <a class="button ghost" href="{{ url_for('download_logs', job_id=job.id) }}"><svg class="icon"><use href="#icon-download"></use></svg><span>Logs</span></a>
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="12">Nenhum job executado ainda.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
