@@ -226,7 +226,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin'
         )
         """
     )
@@ -244,6 +245,7 @@ def init_db():
     migrate_bases_sources()
     migrate_base_sizes()
     migrate_base_resource_links()
+    migrate_user_roles()
     migrate_extraction_resources()
     migrate_extraction_jobs()
     conn.close()
@@ -333,6 +335,20 @@ def migrate_base_resource_links():
     names = {col[1] for col in columns}
     if "source_resource_id" not in names:
         conn.execute("ALTER TABLE bases ADD COLUMN source_resource_id INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def migrate_user_roles():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(users)").fetchall()
+    names = {col[1] for col in columns}
+    if "role" not in names:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'leitor'")
+        conn.execute(
+            "UPDATE users SET role = 'admin' WHERE username = ?",
+            (ADMIN_USERNAME,),
+        )
     conn.commit()
     conn.close()
 
@@ -460,6 +476,13 @@ def execute_db(query, params=()):
     conn.execute(query, params)
     conn.commit()
     conn.close()
+
+
+def get_user_role(username):
+    if not username:
+        return None
+    row = query_db("SELECT role FROM users WHERE username = ?", (username,))
+    return row[0]["role"] if row else None
 
 
 def load_optional_module(module_name):
@@ -968,6 +991,24 @@ def login_required(view_func):
         return view_func(*args, **kwargs)
 
     return wrapper
+
+
+def role_required(*roles):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not session.get("user"):
+                flash("Faça login para continuar.", "error")
+                return redirect(url_for("login", next=request.path))
+            current_role = session.get("role") or get_user_role(session.get("user"))
+            if current_role not in roles:
+                flash("Você não tem permissão para acessar esta funcionalidade.", "error")
+                return redirect(url_for("landing"))
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def parse_csv(file_storage, delimiter):
@@ -2852,7 +2893,7 @@ def extract_teradata():
 @app.route("/configuracoes")
 @login_required
 def settings():
-    users = query_db("SELECT id, username FROM users ORDER BY username ASC")
+    users = query_db("SELECT id, username, role FROM users ORDER BY username ASC")
     return render_template("settings.html", users=users)
 
 
@@ -3049,9 +3090,14 @@ def run_resource(resource_id):
 
 @app.route("/usuarios/criar", methods=["POST"])
 @login_required
+@role_required("admin")
 def create_user():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
+    role = request.form.get("role", "leitor").strip().lower() or "leitor"
+    if role not in ("admin", "gestor", "leitor"):
+        flash("Perfil inválido.", "error")
+        return redirect(url_for("settings"))
 
     if not username or not password:
         flash("Preencha usuário e senha para adicionar.", "error")
@@ -3059,8 +3105,8 @@ def create_user():
 
     try:
         execute_db(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            (username, password),
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            (username, password, role),
         )
     except sqlite3.IntegrityError:
         flash("Nome de usuário já existe.", "error")
@@ -3072,6 +3118,7 @@ def create_user():
 
 @app.route("/usuarios/<int:user_id>/resetar", methods=["POST"])
 @login_required
+@role_required("admin")
 def reset_user(user_id):
     password = request.form.get("password", "")
     if not password:
@@ -3085,6 +3132,7 @@ def reset_user(user_id):
 
 @app.route("/usuarios/<int:user_id>/remover", methods=["POST"])
 @login_required
+@role_required("admin")
 def delete_user(user_id):
     user = query_db("SELECT username FROM users WHERE id = ?", (user_id,))
     if not user:
@@ -3115,12 +3163,13 @@ def login():
         password = request.form.get("password", "")
 
         user = query_db(
-            "SELECT username FROM users WHERE username = ? AND password = ?",
+            "SELECT username, role FROM users WHERE username = ? AND password = ?",
             (username, password),
         )
 
         if user:
             session["user"] = username
+            session["role"] = user[0]["role"] or "leitor"
             next_page = request.args.get("next") or url_for("landing")
             flash("Login realizado com sucesso.", "success")
             return redirect(next_page)
@@ -3133,6 +3182,7 @@ def login():
 @app.route("/logout")
 def logout():
     session.pop("user", None)
+    session.pop("role", None)
     flash("Sessão encerrada.", "success")
     return redirect(url_for("login"))
 

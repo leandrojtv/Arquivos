@@ -19,6 +19,13 @@
       <label for="password">Senha</label>
       <input type="password" id="password" name="password" required />
 
+      <label for="role">Perfil de acesso</label>
+      <select id="role" name="role">
+        <option value="leitor">Leitor</option>
+        <option value="gestor">Gestor</option>
+        <option value="admin">Admin</option>
+      </select>
+
       <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar</span></button>
     </form>
   </div>
@@ -30,6 +37,7 @@
         <thead>
           <tr>
             <th>Usuário</th>
+            <th>Perfil</th>
             <th class="compact">Redefinir senha</th>
             <th class="compact">Ações</th>
           </tr>
@@ -38,6 +46,7 @@
           {% for user in users %}
           <tr>
             <td>{{ user['username'] }}</td>
+            <td>{{ user['role']|capitalize }}</td>
             <td>
               <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
                 <input type="password" name="password" placeholder="Nova senha" required class="wide-input" />
