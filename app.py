@@ -1,5 +1,6 @@
 import csv
 import importlib
+import json
 import os
 import sqlite3
 import threading
@@ -48,6 +49,40 @@ DEFAULT_EXTRACTOR_GESTOR = {
     "secretaria": "Extrações",
     "coordenacao": "Automático",
     "email": "gestor.meta@exemplo.gov",
+}
+DYNAMIC_PERMISSIONS = [
+    ("manage_users", "Gerenciar usuários"),
+    ("manage_roles", "Gerenciar papéis"),
+    ("manage_gestors", "Gerenciar gestores"),
+    ("manage_bases", "Gerenciar bases"),
+    ("manage_imports", "Importar dados"),
+    ("manage_extractions", "Gerenciar extrações"),
+    ("manage_schedules", "Gerenciar schedules"),
+    ("view_reports", "Visualizar relatórios"),
+]
+DEFAULT_ROLES = {
+    "admin": {
+        "description": "Administrador com acesso total",
+        "permissions": [perm[0] for perm in DYNAMIC_PERMISSIONS],
+        "protected": True,
+    },
+    "gestor": {
+        "description": "Gestor com poderes operacionais",
+        "permissions": [
+            "manage_gestors",
+            "manage_bases",
+            "manage_imports",
+            "manage_extractions",
+            "manage_schedules",
+            "view_reports",
+        ],
+        "protected": True,
+    },
+    "leitor": {
+        "description": "Perfil somente leitura",
+        "permissions": ["view_reports"],
+        "protected": True,
+    },
 }
 DAYS_OF_WEEK = [
     ("mon", "Segunda"),
@@ -248,6 +283,8 @@ def init_db():
     migrate_user_roles()
     migrate_extraction_resources()
     migrate_extraction_jobs()
+    migrate_roles_table()
+    ensure_default_roles()
     conn.close()
 
 
@@ -433,6 +470,23 @@ def migrate_extraction_resources():
     conn.close()
 
 
+def migrate_roles_table():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            permissions TEXT NOT NULL,
+            is_protected INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def ensure_default_extractor_gestor():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -459,6 +513,85 @@ def ensure_default_extractor_gestor():
     gid = cursor.lastrowid
     conn.close()
     return gid
+
+
+def ensure_default_roles():
+    conn = sqlite3.connect(DB_PATH)
+    for name, meta in DEFAULT_ROLES.items():
+        conn.execute(
+            """
+            INSERT INTO roles (name, description, permissions, is_protected)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET description=excluded.description, permissions=excluded.permissions, is_protected=excluded.is_protected
+            """,
+            (name, meta.get("description"), json.dumps(meta.get("permissions", [])), 1 if meta.get("protected") else 0),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_role_permissions(role_name):
+    if not role_name:
+        return set()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT permissions FROM roles WHERE name = ?", (role_name,)).fetchone()
+    conn.close()
+    if row:
+        try:
+            return set(json.loads(row["permissions"] or "[]"))
+        except Exception:
+            return set()
+    if role_name in DEFAULT_ROLES:
+        return set(DEFAULT_ROLES[role_name].get("permissions", []))
+    return set()
+
+
+def list_roles():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM roles ORDER BY name COLLATE NOCASE ASC").fetchall()
+    conn.close()
+    roles = []
+    for row in rows:
+        try:
+            perms = json.loads(row["permissions"] or "[]")
+        except Exception:
+            perms = []
+        roles.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "description": row["description"] or "",
+                "permissions": perms,
+                "is_protected": bool(row["is_protected"]),
+            }
+        )
+    return roles
+
+
+def get_role(role_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM roles WHERE id = ?", (role_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    try:
+        perms = json.loads(row["permissions"] or "[]")
+    except Exception:
+        perms = []
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"] or "",
+        "permissions": perms,
+        "is_protected": bool(row["is_protected"]),
+    }
+
+
+def valid_permission_keys():
+    return {perm[0] for perm in DYNAMIC_PERMISSIONS}
 
 
 def query_db(query, params=()):
@@ -1002,6 +1135,40 @@ def role_required(*roles):
                 return redirect(url_for("login", next=request.path))
             current_role = session.get("role") or get_user_role(session.get("user"))
             if current_role not in roles:
+                flash("Você não tem permissão para acessar esta funcionalidade.", "error")
+                return redirect(url_for("landing"))
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def current_permissions():
+    current_role = session.get("role") or get_user_role(session.get("user"))
+    return get_role_permissions(current_role)
+
+
+def permission_required_any(*permissions):
+    return _permission_guard(permissions, require_all=False)
+
+
+def permission_required(*permissions):
+    return _permission_guard(permissions, require_all=True)
+
+
+def _permission_guard(permissions, require_all=True):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not session.get("user"):
+                flash("Faça login para continuar.", "error")
+                return redirect(url_for("login", next=request.path))
+            allowed = current_permissions()
+            checker = all if require_all else any
+            if not permissions:
+                return func(*args, **kwargs)
+            if not checker([perm in allowed for perm in permissions]):
                 flash("Você não tem permissão para acessar esta funcionalidade.", "error")
                 return redirect(url_for("landing"))
             return func(*args, **kwargs)
@@ -1561,6 +1728,7 @@ def landing():
 
 @app.route("/relatorios")
 @login_required
+@permission_required("view_reports")
 def reports():
     def first_name_label(raw_label: str, limit: int = 12) -> str:
         if not raw_label:
@@ -1701,12 +1869,14 @@ def gestor_detail(gestor_id):
 
 @app.route("/gestores/novo")
 @login_required
+@permission_required("manage_gestors")
 def new_gestor_form():
     return render_template("gestor_form.html")
 
 
 @app.route("/gestores/criar", methods=["POST"])
 @login_required
+@permission_required("manage_gestors")
 def add_gestor():
     name = request.form.get("name", "").strip()
     secretaria = request.form.get("secretaria", "").strip()
@@ -1727,6 +1897,7 @@ def add_gestor():
 
 @app.route("/gestores/<int:gestor_id>/editar")
 @login_required
+@permission_required("manage_gestors")
 def edit_gestor(gestor_id):
     gestor = query_db("SELECT * FROM gestors WHERE id = ?", (gestor_id,))
     if not gestor:
@@ -1737,6 +1908,7 @@ def edit_gestor(gestor_id):
 
 @app.route("/gestores/<int:gestor_id>/atualizar", methods=["POST"])
 @login_required
+@permission_required("manage_gestors")
 def update_gestor(gestor_id):
     name = request.form.get("name", "").strip()
     secretaria = request.form.get("secretaria", "").strip()
@@ -1757,6 +1929,7 @@ def update_gestor(gestor_id):
 
 @app.route("/gestores/<int:gestor_id>/remover", methods=["POST"])
 @login_required
+@permission_required("manage_gestors")
 def delete_gestor(gestor_id):
     in_use = query_db(
         "SELECT COUNT(*) as total FROM bases WHERE gestor_id = ? OR substituto1_id = ? OR substituto2_id = ?",
@@ -1832,6 +2005,7 @@ def base_detail(base_id):
 
 @app.route("/bases/nova")
 @login_required
+@permission_required("manage_bases")
 def new_base_form():
     options = gestor_choices()
     if not options:
@@ -1842,6 +2016,7 @@ def new_base_form():
 
 @app.route("/bases/criar", methods=["POST"])
 @login_required
+@permission_required("manage_bases")
 def add_base():
     name = request.form.get("name", "").strip()
     ambiente = request.form.get("ambiente", "").strip()
@@ -1890,6 +2065,7 @@ def add_base():
 
 @app.route("/bases/<int:base_id>/editar")
 @login_required
+@permission_required("manage_bases")
 def edit_base(base_id):
     record = query_db("SELECT * FROM bases WHERE id = ?", (base_id,))
     if not record:
@@ -1902,6 +2078,7 @@ def edit_base(base_id):
 
 @app.route("/bases/<int:base_id>/atualizar", methods=["POST"])
 @login_required
+@permission_required("manage_bases")
 def update_base(base_id):
     name = request.form.get("name", "").strip()
     ambiente = request.form.get("ambiente", "").strip()
@@ -1982,6 +2159,7 @@ def get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao):
 
 @app.route("/bases/<int:base_id>/remover", methods=["POST"])
 @login_required
+@permission_required("manage_bases")
 def delete_base(base_id):
     execute_db("DELETE FROM bases WHERE id = ?", (base_id,))
     flash("Base removida.", "success")
@@ -2096,12 +2274,14 @@ def export_bases_search():
 
 @app.route("/importar", methods=["GET", "POST"])
 @login_required
+@permission_required("manage_imports")
 def import_records():
     return render_template("import.html")
 
 
 @app.route("/importar/gestores/modelo")
 @login_required
+@permission_required("manage_imports")
 def download_gestor_template():
     headers = ["Nome", "Secretaria", "Coordenação", "E-mail"]
     rows = [["Maria Oliveira", "Secretaria de Dados", "Coordenação A", "maria@exemplo.com"]]
@@ -2110,6 +2290,7 @@ def download_gestor_template():
 
 @app.route("/importar/bases/modelo")
 @login_required
+@permission_required("manage_imports")
 def download_bases_template():
     headers = [
         "Base",
@@ -2125,6 +2306,7 @@ def download_bases_template():
 
 @app.route("/importar/relacionamentos/modelo")
 @login_required
+@permission_required("manage_imports")
 def download_relationships_template():
     headers = ["Base", "Gestor titular", "1º substituto", "2º substituto"]
     rows = [["Data Lake", "Maria Oliveira", "", ""]]
@@ -2144,6 +2326,7 @@ def require_import_data(flow):
 
 @app.route("/importar/gestores", methods=["GET", "POST"])
 @login_required
+@permission_required("manage_imports")
 def import_gestors_flow():
     step = request.args.get("step", "upload")
     flow = "gestores"
@@ -2277,6 +2460,7 @@ def import_gestors_flow():
 
 @app.route("/importar/bases", methods=["GET", "POST"])
 @login_required
+@permission_required("manage_imports")
 def import_bases_flow():
     step = request.args.get("step", "upload")
     flow = "bases"
@@ -2453,6 +2637,7 @@ def import_bases_flow():
 
 @app.route("/importar/relacionamentos", methods=["GET", "POST"])
 @login_required
+@permission_required("manage_imports")
 def import_relationships_flow():
     step = request.args.get("step", "upload")
     flow = "relacionamentos"
@@ -2620,6 +2805,7 @@ def import_relationships_flow():
 
 @app.route("/extracao")
 @login_required
+@permission_required("manage_extractions")
 def extraction_menu():
     resources = get_resources()
     schedules = {s["id"]: s for s in get_schedules()}
@@ -2675,6 +2861,7 @@ def prefill_from_resource(resource_id, bucket):
 
 @app.route("/extracao/teradata", methods=["GET", "POST"])
 @login_required
+@permission_required("manage_extractions")
 def extract_teradata():
     step = request.args.get("step", "config")
     flow = "extracao_teradata"
@@ -2892,13 +3079,93 @@ def extract_teradata():
 
 @app.route("/configuracoes")
 @login_required
+@permission_required_any("manage_users", "manage_roles")
 def settings():
     users = query_db("SELECT id, username, role FROM users ORDER BY username ASC")
-    return render_template("settings.html", users=users)
+    roles = list_roles()
+    active_tab = request.args.get("tab", "usuarios") or "usuarios"
+    return render_template(
+        "settings.html",
+        users=users,
+        roles=roles,
+        available_permissions=DYNAMIC_PERMISSIONS,
+        active_tab=active_tab,
+    )
+
+
+@app.route("/papeis/criar", methods=["POST"])
+@login_required
+@permission_required("manage_roles")
+def create_role():
+    name = request.form.get("name", "").strip().lower()
+    description = request.form.get("description", "").strip()
+    permissions = request.form.getlist("permissions")
+    cleaned = sorted({p for p in permissions if p in valid_permission_keys()})
+
+    if not name:
+        flash("Informe um nome para o papel.", "error")
+        return redirect(url_for("settings", tab="roles"))
+
+    try:
+        execute_db(
+            "INSERT INTO roles (name, description, permissions, is_protected) VALUES (?, ?, ?, 0)",
+            (name, description, json.dumps(cleaned)),
+        )
+    except sqlite3.IntegrityError:
+        flash("Já existe um papel com este nome.", "error")
+        return redirect(url_for("settings", tab="roles"))
+
+    flash("Papel criado com sucesso.", "success")
+    return redirect(url_for("settings", tab="roles"))
+
+
+@app.route("/papeis/<int:role_id>/atualizar", methods=["POST"])
+@login_required
+@permission_required("manage_roles")
+def update_role(role_id):
+    role = get_role(role_id)
+    if not role:
+        flash("Papel não encontrado.", "error")
+        return redirect(url_for("settings", tab="roles"))
+
+    description = request.form.get("description", "").strip()
+    permissions = request.form.getlist("permissions")
+    cleaned = sorted({p for p in permissions if p in valid_permission_keys()})
+
+    execute_db(
+        "UPDATE roles SET description = ?, permissions = ? WHERE id = ?",
+        (description, json.dumps(cleaned), role_id),
+    )
+    flash("Papel atualizado.", "success")
+    return redirect(url_for("settings", tab="roles"))
+
+
+@app.route("/papeis/<int:role_id>/remover", methods=["POST"])
+@login_required
+@permission_required("manage_roles")
+def delete_role(role_id):
+    role = get_role(role_id)
+    if not role:
+        flash("Papel não encontrado.", "error")
+        return redirect(url_for("settings", tab="roles"))
+
+    if role["is_protected"]:
+        flash("Este papel é protegido e não pode ser removido.", "error")
+        return redirect(url_for("settings", tab="roles"))
+
+    in_use = query_db("SELECT COUNT(*) as total FROM users WHERE role = ?", (role["name"],))
+    if in_use and in_use[0]["total"]:
+        flash("Não é possível remover papéis atribuídos a usuários.", "error")
+        return redirect(url_for("settings", tab="roles"))
+
+    execute_db("DELETE FROM roles WHERE id = ?", (role_id,))
+    flash("Papel removido.", "success")
+    return redirect(url_for("settings", tab="roles"))
 
 
 @app.route("/schedules", methods=["GET", "POST"])
 @login_required
+@permission_required("manage_schedules")
 def schedules():
     edit_id = request.args.get("edit")
     edit_schedule = None
@@ -2984,6 +3251,7 @@ def schedules():
 
 @app.route("/schedules/<int:schedule_id>/delete", methods=["POST"])
 @login_required
+@permission_required("manage_schedules")
 def delete_schedule(schedule_id):
     execute_db("DELETE FROM schedules WHERE id = ?", (schedule_id,))
     flash("Schedule removido.", "success")
@@ -2992,6 +3260,7 @@ def delete_schedule(schedule_id):
 
 @app.route("/jobs")
 @login_required
+@permission_required("manage_extractions")
 def monitor_jobs():
     jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
     schedules = {sched["id"]: sched for sched in get_schedules()}
@@ -3001,6 +3270,7 @@ def monitor_jobs():
 
 @app.route("/jobs/table")
 @login_required
+@permission_required("manage_extractions")
 def jobs_table_partial():
     jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
     schedules = {sched["id"]: sched for sched in get_schedules()}
@@ -3010,6 +3280,7 @@ def jobs_table_partial():
 
 @app.route("/jobs/<int:job_id>/restart", methods=["POST"])
 @login_required
+@permission_required("manage_extractions")
 def restart_job(job_id):
     job = get_job(job_id)
     if not job:
@@ -3027,6 +3298,7 @@ def restart_job(job_id):
 
 @app.route("/jobs/<int:job_id>/editar")
 @login_required
+@permission_required("manage_extractions")
 def edit_job(job_id):
     job = get_job(job_id)
     if not job:
@@ -3040,6 +3312,7 @@ def edit_job(job_id):
 
 @app.route("/jobs/<int:job_id>/logs")
 @login_required
+@permission_required("manage_extractions")
 def download_logs(job_id):
     job = get_job(job_id)
     if not job:
@@ -3053,6 +3326,7 @@ def download_logs(job_id):
 
 @app.route("/resources/<int:resource_id>/run", methods=["POST"])
 @login_required
+@permission_required("manage_extractions")
 def run_resource(resource_id):
     res = get_resource(resource_id)
     if not res:
@@ -3090,18 +3364,19 @@ def run_resource(resource_id):
 
 @app.route("/usuarios/criar", methods=["POST"])
 @login_required
-@role_required("admin")
+@permission_required("manage_users")
 def create_user():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     role = request.form.get("role", "leitor").strip().lower() or "leitor"
-    if role not in ("admin", "gestor", "leitor"):
+    available_roles = {r["name"] for r in list_roles()}
+    if role not in available_roles:
         flash("Perfil inválido.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     if not username or not password:
         flash("Preencha usuário e senha para adicionar.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     try:
         execute_db(
@@ -3110,47 +3385,47 @@ def create_user():
         )
     except sqlite3.IntegrityError:
         flash("Nome de usuário já existe.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     flash("Usuário criado com sucesso.", "success")
-    return redirect(url_for("settings"))
+    return redirect(url_for("settings", tab="usuarios"))
 
 
 @app.route("/usuarios/<int:user_id>/resetar", methods=["POST"])
 @login_required
-@role_required("admin")
+@permission_required("manage_users")
 def reset_user(user_id):
     password = request.form.get("password", "")
     if not password:
         flash("Informe uma nova senha para continuar.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     execute_db("UPDATE users SET password = ? WHERE id = ?", (password, user_id))
     flash("Senha atualizada.", "success")
-    return redirect(url_for("settings"))
+    return redirect(url_for("settings", tab="usuarios"))
 
 
 @app.route("/usuarios/<int:user_id>/remover", methods=["POST"])
 @login_required
-@role_required("admin")
+@permission_required("manage_users")
 def delete_user(user_id):
     user = query_db("SELECT username FROM users WHERE id = ?", (user_id,))
     if not user:
         flash("Usuário não encontrado.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     username = user[0]["username"]
     if username == session.get("user"):
         flash("Não é possível remover o usuário logado.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     if username == ADMIN_USERNAME:
         flash("O usuário administrador padrão não pode ser removido.", "error")
-        return redirect(url_for("settings"))
+        return redirect(url_for("settings", tab="usuarios"))
 
     execute_db("DELETE FROM users WHERE id = ?", (user_id,))
     flash("Usuário removido.", "success")
-    return redirect(url_for("settings"))
+    return redirect(url_for("settings", tab="usuarios"))
 
 
 @app.route("/login", methods=["GET", "POST"])

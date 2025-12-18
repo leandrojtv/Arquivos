@@ -5,11 +5,85 @@
   <div class="section-header">
     <div>
       <p class="eyebrow">Configurações</p>
-      <h2>Gestão de Usuários</h2>
-      <p class="muted">Cadastre novos acessos, redefina senhas e desative usuários que não devem mais utilizar o sistema.</p>
+      <h2>Gestão e política de acesso</h2>
+      <p class="muted">Cadastre usuários e ajuste as permissões de cada papel para controlar o que pode ser feito na ferramenta.</p>
     </div>
   </div>
 
+  <div class="tabs" style="margin-bottom: 1rem; display: flex; gap: .5rem; flex-wrap: wrap;">
+    <a class="button {% if active_tab == 'usuarios' %}secondary{% else %}ghost{% endif %}" href="{{ url_for('settings', tab='usuarios') }}">Usuários</a>
+    <a class="button {% if active_tab == 'roles' %}secondary{% else %}ghost{% endif %}" href="{{ url_for('settings', tab='roles') }}">Política de acesso</a>
+  </div>
+
+  {% if active_tab == 'roles' %}
+  <div class="panel">
+    <h3>Novo papel</h3>
+    <form action="{{ url_for('create_role') }}" method="post" class="stacked">
+      <label for="role-name">Nome</label>
+      <input id="role-name" name="name" type="text" placeholder="ex.: operador" required />
+
+      <label for="role-description">Descrição</label>
+      <input id="role-description" name="description" type="text" placeholder="Como este papel deve ser usado" />
+
+      <fieldset class="stacked" style="margin-top: .5rem;">
+        <legend>Permissões</legend>
+        <div class="checkbox-grid" style="display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+          {% for perm, label in available_permissions %}
+          <label class="checkbox">
+            <input type="checkbox" name="permissions" value="{{ perm }}" />
+            <span>{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar papel</span></button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top: 1rem;">
+    <h3>Papéis configurados</h3>
+    {% if roles %}
+      <div class="stacked" style="gap: 1rem;">
+        {% for role in roles %}
+        <div class="panel" style="border: 1px solid var(--border-subtle);">
+          <div class="section-header" style="align-items: center;">
+            <div>
+              <p class="eyebrow">{{ role.name }}</p>
+              <p class="muted">{{ role.description or 'Sem descrição' }}</p>
+            </div>
+            {% if role.is_protected %}<span class="tag">Protegido</span>{% endif %}
+          </div>
+          <form action="{{ url_for('update_role', role_id=role.id) }}" method="post" class="stacked">
+            <label>Descrição</label>
+            <input type="text" name="description" value="{{ role.description }}" placeholder="Descrição do papel" />
+
+            <fieldset class="stacked" style="margin-top: .25rem;">
+              <legend>Permissões</legend>
+              <div class="checkbox-grid" style="display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                {% for perm, label in available_permissions %}
+                <label class="checkbox">
+                  <input type="checkbox" name="permissions" value="{{ perm }}" {% if perm in role.permissions %}checked{% endif %} />
+                  <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+
+            <div class="actions" style="justify-content: space-between;">
+              <button type="submit" class="button secondary"><svg class="icon"><use href="#icon-check"></use></svg><span>Salvar papel</span></button>
+              <button form="delete-role-{{ role.id }}" type="submit" class="button ghost danger" {% if role.is_protected %}disabled title="Papéis padrão não podem ser removidos"{% else %}onclick="return confirm('Remover este papel?')"{% endif %}><svg class="icon"><use href="#icon-trash"></use></svg><span>Remover</span></button>
+            </div>
+          </form>
+          <form id="delete-role-{{ role.id }}" action="{{ url_for('delete_role', role_id=role.id) }}" method="post"></form>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhum papel cadastrado.</p>
+    {% endif %}
+  </div>
+  {% else %}
   <div class="panel">
     <h3>Novo usuário</h3>
     <form action="{{ url_for('create_user') }}" method="post" class="stacked">
@@ -21,9 +95,9 @@
 
       <label for="role">Perfil de acesso</label>
       <select id="role" name="role">
-        <option value="leitor">Leitor</option>
-        <option value="gestor">Gestor</option>
-        <option value="admin">Admin</option>
+        {% for role in roles %}
+        <option value="{{ role.name }}">{{ role.name|capitalize }}</option>
+        {% endfor %}
       </select>
 
       <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar</span></button>
@@ -71,5 +145,6 @@
     </div>
     <p class="muted">O usuário administrador padrão não pode ser removido. Para utilizá-lo fora do padrão, ajuste as variáveis de ambiente <code>ADMIN_USERNAME</code> e <code>ADMIN_PASSWORD</code>.</p>
   </div>
+  {% endif %}
 </section>
 {% endblock %}
