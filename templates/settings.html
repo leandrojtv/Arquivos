@@ -17,11 +17,25 @@
   .settings-compact input[type="text"],
   .settings-compact input[type="password"],
   .settings-compact select {
-    max-width: 240px;
+    max-width: 220px;
   }
   .settings-compact .inline-form.stacked.sm-row .button {
     padding: 0.28rem 0.48rem;
     min-width: 82px;
+  }
+  .settings-compact .table-wrapper td form.inline-form {
+    align-items: center;
+  }
+  .settings-compact .table-wrapper td form.inline-form select,
+  .settings-compact .table-wrapper td form.inline-form input {
+    max-width: 170px;
+  }
+  .settings-compact .table-wrapper td form.inline-form input[type="password"] {
+    max-width: 150px;
+  }
+  .settings-compact .table-wrapper td form.inline-form .button {
+    min-width: 78px;
+    padding: 0.28rem 0.48rem;
   }
   .settings-compact .inline-form.sm-row select,
   .settings-compact .inline-form.sm-row input {
@@ -155,7 +169,7 @@
             <td>{{ user['username'] }}</td>
             <td>
               <form action="{{ url_for('update_user_role', user_id=user['id']) }}" method="post" class="inline-form sm-row">
-                <select name="role" style="min-width: 150px;">
+                <select name="role" style="min-width: 140px;">
                   {% for role in roles %}
                   <option value="{{ role.name }}" {% if role.name == user['role'] %}selected{% endif %}>{{ role.name|capitalize }}</option>
                   {% endfor %}
@@ -165,7 +179,7 @@
             </td>
             <td>
               <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
-                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 170px;" />
+                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 140px;" />
                 <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
               </form>
             </td>
