@@ -5,18 +5,23 @@
   .settings-compact .inline-form,
   .settings-compact .stacked.sm-row {
     gap: 0.5rem;
-  }
+    }
   .settings-compact .compact,
   .settings-compact .button.compact,
   .settings-compact .button.secondary,
   .settings-compact .button.ghost {
-    padding: 0.35rem 0.6rem;
-    font-size: 0.95rem;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.92rem;
+    line-height: 1.1;
   }
   .settings-compact input[type="text"],
   .settings-compact input[type="password"],
   .settings-compact select {
-    max-width: 260px;
+    max-width: 240px;
+  }
+  .settings-compact .inline-form.sm-row select,
+  .settings-compact .inline-form.sm-row input {
+    min-height: 2.1rem;
   }
   .settings-compact .checkbox-grid {
     gap: 0.4rem;
@@ -146,7 +151,7 @@
             <td>{{ user['username'] }}</td>
             <td>
               <form action="{{ url_for('update_user_role', user_id=user['id']) }}" method="post" class="inline-form sm-row">
-                <select name="role" style="min-width: 160px;">
+                <select name="role" style="min-width: 150px;">
                   {% for role in roles %}
                   <option value="{{ role.name }}" {% if role.name == user['role'] %}selected{% endif %}>{{ role.name|capitalize }}</option>
                   {% endfor %}
@@ -156,8 +161,8 @@
             </td>
             <td>
               <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
-                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 220px;" />
-                <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
+                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 180px;" />
+                <button type="submit" class="button secondary compact" style="min-width: 88px;"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
               </form>
             </td>
             <td>
