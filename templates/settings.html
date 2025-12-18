@@ -1,6 +1,30 @@
 {% extends 'base.html' %}
 {% block title %}Configurações{% endblock %}
 {% block content %}
+<style>
+  .settings-compact .inline-form,
+  .settings-compact .stacked.sm-row {
+    gap: 0.5rem;
+  }
+  .settings-compact .compact,
+  .settings-compact .button.compact,
+  .settings-compact .button.secondary,
+  .settings-compact .button.ghost {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.95rem;
+  }
+  .settings-compact input[type="text"],
+  .settings-compact input[type="password"],
+  .settings-compact select {
+    max-width: 260px;
+  }
+  .settings-compact .checkbox-grid {
+    gap: 0.4rem;
+  }
+  .settings-compact .actions {
+    gap: 0.5rem;
+  }
+</style>
 <section class="card">
   <div class="section-header">
     <div>
@@ -16,7 +40,7 @@
   </div>
 
   {% if active_tab == 'roles' %}
-  <div class="panel">
+  <div class="panel settings-compact">
     <h3>Novo papel</h3>
     <form action="{{ url_for('create_role') }}" method="post" class="stacked">
       <label for="role-name">Nome</label>
@@ -37,11 +61,11 @@
         </div>
       </fieldset>
 
-      <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar papel</span></button>
+      <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar papel</span></button>
     </form>
   </div>
 
-  <div class="panel" style="margin-top: 1rem;">
+  <div class="panel settings-compact" style="margin-top: 1rem;">
     <h3>Papéis configurados</h3>
     {% if roles %}
       <div class="stacked" style="gap: 1rem;">
@@ -71,8 +95,8 @@
             </fieldset>
 
             <div class="actions" style="justify-content: space-between;">
-              <button type="submit" class="button secondary"><svg class="icon"><use href="#icon-check"></use></svg><span>Salvar papel</span></button>
-              <button form="delete-role-{{ role.id }}" type="submit" class="button ghost danger" {% if role.is_protected %}disabled title="Papéis padrão não podem ser removidos"{% else %}onclick="return confirm('Remover este papel?')"{% endif %}><svg class="icon"><use href="#icon-trash"></use></svg><span>Remover</span></button>
+              <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-check"></use></svg><span>Salvar papel</span></button>
+              <button form="delete-role-{{ role.id }}" type="submit" class="button ghost danger compact" {% if role.is_protected %}disabled title="Papéis padrão não podem ser removidos"{% else %}onclick="return confirm('Remover este papel?')"{% endif %}><svg class="icon"><use href="#icon-trash"></use></svg><span>Remover</span></button>
             </div>
           </form>
           <form id="delete-role-{{ role.id }}" action="{{ url_for('delete_role', role_id=role.id) }}" method="post"></form>
@@ -84,7 +108,7 @@
     {% endif %}
   </div>
   {% else %}
-  <div class="panel">
+  <div class="panel settings-compact">
     <h3>Novo usuário</h3>
     <form action="{{ url_for('create_user') }}" method="post" class="stacked">
       <label for="username">Usuário</label>
@@ -100,11 +124,11 @@
         {% endfor %}
       </select>
 
-      <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar</span></button>
+      <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar</span></button>
     </form>
   </div>
 
-  <div class="panel" style="margin-top: 1rem;">
+  <div class="panel settings-compact" style="margin-top: 1rem;">
     <h3>Usuários existentes</h3>
     <div class="table-wrapper">
       <table>
@@ -121,8 +145,8 @@
           <tr>
             <td>{{ user['username'] }}</td>
             <td>
-              <form action="{{ url_for('update_user_role', user_id=user['id']) }}" method="post" class="inline-form sm-row" style="gap: .5rem;">
-                <select name="role">
+              <form action="{{ url_for('update_user_role', user_id=user['id']) }}" method="post" class="inline-form sm-row">
+                <select name="role" style="min-width: 160px;">
                   {% for role in roles %}
                   <option value="{{ role.name }}" {% if role.name == user['role'] %}selected{% endif %}>{{ role.name|capitalize }}</option>
                   {% endfor %}
@@ -132,7 +156,7 @@
             </td>
             <td>
               <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
-                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" />
+                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 220px;" />
                 <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
               </form>
             </td>
