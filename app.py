@@ -3428,6 +3428,31 @@ def delete_user(user_id):
     return redirect(url_for("settings", tab="usuarios"))
 
 
+@app.route("/usuarios/<int:user_id>/papel", methods=["POST"])
+@login_required
+@permission_required("manage_users")
+def update_user_role(user_id):
+    role = request.form.get("role", "").strip().lower()
+    available_roles = {r["name"] for r in list_roles()}
+    if role not in available_roles:
+        flash("Perfil inválido.", "error")
+        return redirect(url_for("settings", tab="usuarios"))
+
+    user = query_db("SELECT username FROM users WHERE id = ?", (user_id,))
+    if not user:
+        flash("Usuário não encontrado.", "error")
+        return redirect(url_for("settings", tab="usuarios"))
+
+    username = user[0]["username"]
+    if username == ADMIN_USERNAME and role != "admin":
+        flash("O usuário administrador padrão deve permanecer como admin.", "error")
+        return redirect(url_for("settings", tab="usuarios"))
+
+    execute_db("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+    flash("Perfil atualizado.", "success")
+    return redirect(url_for("settings", tab="usuarios"))
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user"):
