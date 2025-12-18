@@ -5,7 +5,7 @@
   .settings-compact .inline-form,
   .settings-compact .stacked.sm-row {
     gap: 0.5rem;
-    }
+  }
   .settings-compact .compact,
   .settings-compact .button.compact,
   .settings-compact .button.secondary,
@@ -18,6 +18,10 @@
   .settings-compact input[type="password"],
   .settings-compact select {
     max-width: 240px;
+  }
+  .settings-compact .inline-form.stacked.sm-row .button {
+    padding: 0.28rem 0.48rem;
+    min-width: 82px;
   }
   .settings-compact .inline-form.sm-row select,
   .settings-compact .inline-form.sm-row input {
@@ -161,8 +165,8 @@
             </td>
             <td>
               <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
-                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 180px;" />
-                <button type="submit" class="button secondary compact" style="min-width: 88px;"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
+                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" style="max-width: 170px;" />
+                <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
               </form>
             </td>
             <td>
