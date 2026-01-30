@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Extração Teradata{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Fluxo em etapas</p>
+      <h2>Teradata · Metadados</h2>
+      <p class="subtitle">Monte a conexão JDBC, teste rapidamente e aplique o catálogo diretamente nas bases com acompanhamento.</p>
+    </div>
+    <div class="pill">Teradata</div>
+  </div>
+
+  {% if step == 'config' %}
+  <div class="wizard">
+    <div class="wizard-step active">1. Conexão</div>
+    <div class="wizard-step">2. Tipo</div>
+    <div class="wizard-step">3. Agenda</div>
+    <div class="wizard-step">4. Extração</div>
+  </div>
+  <form action="{{ url_for('extract_teradata', step='config', resource_id=bucket.get('resource_id')) }}" method="post" class="card">
+    <div class="grid-two">
+      <div>
+        <label for="resource_name">Nome do resource</label>
+        <input type="text" name="resource_name" id="resource_name" value="{{ bucket.get('resource_name','') }}" placeholder="ex.: Teradata Produção" />
+      </div>
+      <div>
+        <label for="host">Host / IP</label>
+        <input type="text" name="host" id="host" value="{{ bucket.get('config', {}).get('host','') }}" placeholder="ex.: tera.company.local" />
+      </div>
+      <div>
+        <label for="database_name">Nome do banco</label>
+        <input type="text" name="database_name" id="database_name" value="{{ bucket.get('config', {}).get('database_name','') }}" placeholder="DBC" />
+      </div>
+      <div>
+        <label for="connection_type">Tipo de conexão</label>
+        <select name="connection_type" id="connection_type">
+          <option value="TD2" {% if bucket.get('config', {}).get('connection_type','TD2') == 'TD2' %}selected{% endif %}>TD2</option>
+          <option value="LDAP" {% if bucket.get('config', {}).get('connection_type') == 'LDAP' %}selected{% endif %}>LDAP</option>
+        </select>
+      </div>
+      <div>
+        <label for="extra_params">Parâmetros extras</label>
+        <input type="text" name="extra_params" id="extra_params" value="{{ bucket.get('config', {}).get('extra_params','') }}" placeholder="ex.: DBS_PORT=1025,CHARSET=UTF8" />
+      </div>
+      <div>
+        <label for="log_level">Nível de log</label>
+        <select name="log_level" id="log_level">
+          {% set level = bucket.get('log_level','INFO') %}
+          <option value="ERROR" {% if level=='ERROR' %}selected{% endif %}>Error</option>
+          <option value="WARN" {% if level=='WARN' %}selected{% endif %}>Warn</option>
+          <option value="INFO" {% if level=='INFO' %}selected{% endif %}>Info</option>
+          <option value="DEBUG" {% if level=='DEBUG' %}selected{% endif %}>Debug</option>
+          <option value="VERBOSE" {% if level=='VERBOSE' %}selected{% endif %}>Verbose</option>
+        </select>
+      </div>
+    </div>
+    <label for="jdbc_url">String JDBC (opcional)</label>
+    <input type="text" name="jdbc_url" id="jdbc_url" value="{{ bucket.get('config', {}).get('jdbc_url','') }}" placeholder="jdbc:teradata://host/DATABASE=DBC,LOGMECH=TD2" />
+    <p class="form-helper">Se deixar vazio, o JDBC será montado automaticamente com os campos acima.</p>
+
+    <div class="grid-two">
+      <div>
+        <label for="username">Usuário</label>
+        <input type="text" name="username" id="username" value="{{ bucket.get('config', {}).get('username','') }}" />
+      </div>
+      <div>
+        <label for="password">Senha</label>
+        <input type="password" name="password" id="password" value="{{ bucket.get('config', {}).get('password','') }}" />
+      </div>
+    </div>
+
+    <div class="actions-inline">
+      <button type="submit" class="button ghost" name="action" value="test"><svg class="icon"><use href="#icon-lab"></use></svg><span>Testar conexão</span></button>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Avançar</span></button>
+    </div>
+  </form>
+
+  {% elif step == 'tipos' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Conexão</div>
+    <div class="wizard-step active">2. Tipo</div>
+    <div class="wizard-step">3. Agenda</div>
+    <div class="wizard-step">4. Extração</div>
+  </div>
+  <form action="{{ url_for('extract_teradata', step='tipos', resource_id=bucket.get('resource_id')) }}" method="post" class="card">
+    <p class="form-helper">Escolha o tipo de execução e o modo. No incremental apenas bases novas ou atualizações são aplicadas; a execução completa limpa as bases vindas do Teradata antes de inserir novamente.</p>
+    <div class="grid-two">
+      <div class="card inset">
+        <label class="radio-tile">
+          <input type="radio" name="extraction_type" value="metadata" {% if bucket.get('extraction_type','metadata') == 'metadata' %}checked{% endif %} />
+          <div>
+            <strong>Metadados</strong>
+            <p>Busca DatabaseName e CommentString conforme a consulta informada.</p>
+          </div>
+        </label>
+        <label class="radio-tile disabled">
+          <input type="radio" disabled />
+          <div>
+            <strong>Profiling</strong>
+            <p>Em breve para estatísticas e qualidade.</p>
+          </div>
+        </label>
+      </div>
+      <div class="card inset">
+        <label class="radio-tile">
+          <input type="radio" name="mode" value="incremental" {% if bucket.get('mode','incremental') == 'incremental' %}checked{% endif %} />
+          <div>
+            <strong>Incremental</strong>
+            <p>Inclui novas bases e atualiza descrições já importadas.</p>
+          </div>
+        </label>
+        <label class="radio-tile">
+          <input type="radio" name="mode" value="full" {% if bucket.get('mode') == 'full' %}checked{% endif %} />
+          <div>
+            <strong>Completa</strong>
+            <p>Remove bases trazidas de extrações anteriores do Teradata e reaplica tudo.</p>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div class="card inset">
+      <p class="eyebrow">Filtros por nome do database</p>
+      <p class="form-helper">Use curingas para restringir a extração. Separe múltiplos filtros por vírgula. Exemplos de inclusão: <code>P_*</code>, <code>*_Datalab</code>. Exemplos de exclusão: <code>TD_*</code>, <code>SYS*</code>.</p>
+      <div class="grid-two">
+        <div>
+          <label for="include_filters">Incluir (LIKE com wildcards)</label>
+          <input type="text" id="include_filters" name="include_filters" value="{{ bucket.get('include_filters','') }}" placeholder="P_*, *_Datalab" />
+        </div>
+        <div>
+          <label for="exclude_filters">Excluir</label>
+          <input type="text" id="exclude_filters" name="exclude_filters" value="{{ bucket.get('exclude_filters','') }}" placeholder="TD_*, SYS*" />
+        </div>
+      </div>
+    </div>
+    <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Continuar</span></button>
+    </div>
+  </form>
+
+  {% elif step == 'agenda' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Conexão</div>
+    <div class="wizard-step done">2. Tipo</div>
+    <div class="wizard-step active">3. Agenda</div>
+    <div class="wizard-step">4. Extração</div>
+  </div>
+  <form action="{{ url_for('extract_teradata', step='agenda', resource_id=bucket.get('resource_id')) }}" method="post" class="card">
+    <p class="form-helper">Escolha se deseja executar apenas uma vez ou vincular a um schedule existente para reuso em novos jobs.</p>
+    <label class="radio-tile">
+      <input type="radio" name="execution_plan" value="once" {% if bucket.get('run_once', True) %}checked{% endif %} />
+      <div>
+        <strong>Execução única</strong>
+        <p>Roda apenas uma vez sem reaproveitar agenda.</p>
+      </div>
+    </label>
+
+    <div class="card inset">
+      <div class="actions-inline">
+        <label class="radio-tile">
+          <input type="radio" name="execution_plan" value="scheduled" {% if bucket.get('run_once') is sameas false %}checked{% endif %} />
+          <div>
+            <strong>Usar schedule existente</strong>
+            <p>Reaproveite agendas criadas no gerenciador.</p>
+          </div>
+        </label>
+        <a class="button ghost" href="{{ url_for('schedules') }}"><svg class="icon"><use href="#icon-calendar"></use></svg><span>Gerenciar schedules</span></a>
+      </div>
+      <label for="schedule_id">Selecione um schedule</label>
+      <select name="schedule_id" id="schedule_id">
+        <option value="">Escolha uma agenda</option>
+        {% for sched in schedules %}
+        <option value="{{ sched.id }}" {% if bucket.get('schedule_id') == sched.id %}selected{% endif %}>
+          {{ sched.name }} · {{ humanize_days(sched.days_of_week) }} {% if sched.start_time %}- {{ sched.start_time }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% if schedules|length == 0 %}
+      <p class="form-helper">Nenhum schedule criado ainda. Crie um novo para habilitar execuções recorrentes.</p>
+      {% endif %}
+    </div>
+    <div class="actions-inline">
+      <a class="button ghost" href="{{ url_for('extract_teradata', step='tipos') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Avançar</span></button>
+    </div>
+  </form>
+
+  {% elif step == 'executar' %}
+  <div class="wizard">
+    <div class="wizard-step done">1. Conexão</div>
+    <div class="wizard-step done">2. Tipo</div>
+    <div class="wizard-step done">3. Agenda</div>
+    <div class="wizard-step active">4. Extração</div>
+  </div>
+  <div class="card spacious">
+    <div class="grid-two wide-left">
+      <div>
+        <p class="eyebrow">Resumo</p>
+        <div class="info-grid">
+          <div class="badge">Conexão</div>
+          <div class="code-block">{{ jdbc_preview or 'JDBC montado automaticamente' }}</div>
+          <div class="muted">Banco: {{ connection_summary.database or '—' }} · Host: {{ connection_summary.host or '—' }} · Tipo: {{ connection_summary.type or '—' }} · Usuário: {{ connection_summary.user or '—' }}</div>
+        </div>
+        <div class="summary-list compact">
+          <div><strong>Resource:</strong> {{ bucket.get('resource_name','Recurso Teradata') }}</div>
+          <div><strong>Tipo:</strong> {{ bucket.get('extraction_type','metadata') }}</div>
+          <div><strong>Modo:</strong> {{ bucket.get('mode','incremental') }}</div>
+          <div><strong>Log:</strong> {{ bucket.get('log_level','INFO') }}</div>
+          <div><strong>Incluir DBs:</strong> {{ bucket.get('include_filters') or '—' }}</div>
+          <div><strong>Excluir DBs:</strong> {{ bucket.get('exclude_filters') or '—' }}</div>
+        </div>
+        <div class="card inset schedule-callout">
+          <div class="badge">Schedule</div>
+          {% if selected_schedule %}
+          <div class="muted">{{ selected_schedule['name'] }}</div>
+          <div class="schedule-grid">
+            <div><strong>Dias:</strong> {{ humanize_days(selected_schedule['days_of_week']) or '—' }}</div>
+            <div><strong>Hora:</strong> {{ selected_schedule['start_time'] or '—' }}</div>
+            <div><strong>Início:</strong> {{ selected_schedule['start_date'] or '—' }}</div>
+            <div><strong>Intervalo:</strong> {{ selected_schedule['interval_minutes'] or '—' }} min</div>
+            <div><strong>Modo:</strong> {% if selected_schedule['repeat_forever'] %}Recorrente{% else %}Parar ao concluir{% endif %}</div>
+          </div>
+          {% else %}
+          <p class="subtitle">Execução única; nenhuma agenda vinculada.</p>
+          {% endif %}
+          {% if bucket.get('next_run_at') %}
+          <div class="muted">Próxima execução agendada: {{ bucket.get('next_run_at') }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <p class="eyebrow">Gestor padrão</p>
+        <p class="subtitle">As bases extraídas são atribuídas ao gestor padrão de metadados para manter o vínculo obrigatório.</p>
+      </div>
+    </div>
+    <form action="{{ url_for('extract_teradata', step='executar', resource_id=bucket.get('resource_id')) }}" method="post" class="actions-inline">
+      <button type="submit" name="action" value="save" class="button ghost"><svg class="icon"><use href="#icon-save"></use></svg><span>Salvar</span></button>
+      <button type="submit" name="action" value="execute" class="button"><svg class="icon"><use href="#icon-rocket"></use></svg><span>Salvar e executar</span></button>
+      <a class="button ghost" href="{{ url_for('extraction_menu') }}"><svg class="icon"><use href="#icon-flag"></use></svg><span>Voltar</span></a>
+    </form>
+
+    {% if bucket.get('result') %}
+    {% set result = bucket.get('result') %}
+    <div class="progress">
+      <div class="progress-bar" style="width: {{ result.get('total', 0) and 100 or 0 }}%"></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{ result.get('imported', 0) }}</strong><span>Aplicadas</span></div>
+      <div class="stat"><strong>{{ result.get('total', 0) }}</strong><span>Recebidas</span></div>
+    </div>
+    {% if result.note %}
+    <div class="alert info">{{ result.note }}</div>
+    {% endif %}
+    {% if result.errors and result.errors|length %}
+    <div class="alert error">
+      <p>Ocorreram avisos:</p>
+      <ul>
+        {% for err in result.errors %}<li>{{ err }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="alert success">Extração concluída.</div>
+    {% endif %}
+    <div class="actions-inline">
+      <a class="button" href="{{ url_for('monitor_jobs') }}"><svg class="icon"><use href="#icon-chart"></use></svg><span>Acompanhar jobs</span></a>
+      <a class="button ghost" href="{{ url_for('extract_teradata') }}"><svg class="icon"><use href="#icon-repeat"></use></svg><span>Novo fluxo</span></a>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

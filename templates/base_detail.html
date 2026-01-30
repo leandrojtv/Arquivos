@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Base: {{ base.name }}{% endblock %}
+{% block content %}
+<section class="card detail-card">
+  <header class="card-header">
+    <div>
+      <p class="eyebrow">Detalhes da base</p>
+      <h2>{{ base.name }}</h2>
+      <p class="subtitle">Visualize o ambiente, gestores e demais informações desta base.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button ghost" href="{{ url_for('list_bases') }}"><svg class="icon"><use href="#icon-arrow-left"></use></svg><span>Voltar</span></a>
+      <a class="button secondary" href="{{ url_for('edit_base', base_id=base.id) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
+    </div>
+  </header>
+
+  <div class="detail-grid">
+    <div class="detail-tile">
+      <p class="eyebrow">Ambiente</p>
+      <p class="value">{{ base.ambiente or 'Não informado' }}</p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">Fonte</p>
+      <p class="value">{{ base.source_connector|capitalize }}</p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">Gestor titular</p>
+      <p class="value">
+        {% if base.gestor_id %}
+        <a class="link" href="{{ url_for('gestor_detail', gestor_id=base.gestor_id) }}">{{ base.gestor_name }}</a>
+        {% else %}—{% endif %}
+      </p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">1º substituto</p>
+      <p class="value">
+        {% if base.substituto1_id %}
+        <a class="link" href="{{ url_for('gestor_detail', gestor_id=base.substituto1_id) }}">{{ base.sub1_name }}</a>
+        {% else %}—{% endif %}
+      </p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">2º substituto</p>
+      <p class="value">
+        {% if base.substituto2_id %}
+        <a class="link" href="{{ url_for('gestor_detail', gestor_id=base.substituto2_id) }}">{{ base.sub2_name }}</a>
+        {% else %}—{% endif %}
+      </p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">Última alteração</p>
+      <p class="value">{{ base.last_updated_at or '—' }}</p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">Alterado por</p>
+      <p class="value">{{ base.last_updated_by or '—' }}</p>
+    </div>
+  </div>
+
+  <div class="detail-card-section">
+    <p class="eyebrow">Tamanho do database</p>
+    <div class="detail-grid">
+      <div class="detail-tile">
+        <p class="eyebrow">Uso atual</p>
+        <p class="value">{{ base.current_perm_gb is not none and ('%.2f GB' % base.current_perm_gb) or '—' }}</p>
+      </div>
+      <div class="detail-tile">
+        <p class="eyebrow">Limite</p>
+        <p class="value">{{ base.max_perm_gb is not none and ('%.2f GB' % base.max_perm_gb) or '—' }}</p>
+      </div>
+      <div class="detail-tile">
+        <p class="eyebrow">Espaço livre</p>
+        <p class="value">{{ base.free_space_gb is not none and ('%.2f GB' % base.free_space_gb) or '—' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="description-block">
+    <p class="eyebrow">Descrição</p>
+    <p class="value">{{ base.descricao or 'Nenhuma descrição fornecida.' }}</p>
+  </div>
+</section>
+{% endblock %}

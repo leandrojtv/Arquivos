@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Monitor de jobs{% endblock %}
+{% block content %}
+<section class="form-section">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Execuções</p>
+      <h2>Monitor de extrações</h2>
+      <p class="subtitle">Acompanhe o histórico de jobs, baixe logs e reinicie ou reconfigure quando necessário.</p>
+    </div>
+    <div class="pill">Jobs</div>
+  </div>
+  <div class="card">
+    <div class="actions-inline" style="justify-content: flex-end; margin-bottom: 0.75rem; gap: 0.5rem;">
+      <button class="button ghost" id="refresh-jobs"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar lista</span></button>
+    </div>
+    <div class="table-scroll" id="jobs-table">
+      {% include "jobs_table.html" %}
+    </div>
+  </div>
+</section>
+<script>
+  const refreshBtn = document.getElementById('refresh-jobs');
+  const container = document.getElementById('jobs-table');
+  if (refreshBtn && container) {
+    refreshBtn.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      refreshBtn.classList.add('loading');
+      try {
+        const resp = await fetch('{{ url_for('jobs_table_partial') }}');
+        if (resp.ok) {
+          const html = await resp.text();
+          container.innerHTML = html;
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        refreshBtn.classList.remove('loading');
+      }
+    });
+  }
+</script>
+{% endblock %}

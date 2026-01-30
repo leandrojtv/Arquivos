@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Configurações{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Configurações</p>
+      <h2>Gestão de Usuários</h2>
+      <p class="muted">Cadastre novos acessos, redefina senhas e desative usuários que não devem mais utilizar o sistema.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Novo usuário</h3>
+    <form action="{{ url_for('create_user') }}" method="post" class="stacked">
+      <label for="username">Usuário</label>
+      <input type="text" id="username" name="username" required />
+
+      <label for="password">Senha</label>
+      <input type="password" id="password" name="password" required />
+
+      <label for="role">Perfil de acesso</label>
+      <select id="role" name="role">
+        <option value="leitor">Leitor</option>
+        <option value="gestor">Gestor</option>
+        <option value="admin">Admin</option>
+      </select>
+
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-plus"></use></svg><span>Adicionar</span></button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top: 1rem;">
+    <h3>Usuários existentes</h3>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>Perfil</th>
+            <th class="compact">Redefinir senha</th>
+            <th class="compact">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td>{{ user['username'] }}</td>
+            <td>{{ user['role']|capitalize }}</td>
+            <td>
+              <form action="{{ url_for('reset_user', user_id=user['id']) }}" method="post" class="inline-form stacked sm-row">
+                <input type="password" name="password" placeholder="Nova senha" required class="wide-input" />
+                <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-refresh"></use></svg><span>Atualizar</span></button>
+              </form>
+            </td>
+            <td>
+              <div class="actions">
+                <form action="{{ url_for('delete_user', user_id=user['id']) }}" method="post">
+                  <button type="submit" class="button ghost danger compact" {% if user['username'] == 'admin' %}disabled title="Admin não pode ser removido"{% else %}onclick="return confirm('Remover este usuário?')" {% endif %}><svg class="icon"><use href="#icon-trash"></use></svg><span>Remover</span></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3">Nenhum usuário cadastrado.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">O usuário administrador padrão não pode ser removido. Para utilizá-lo fora do padrão, ajuste as variáveis de ambiente <code>ADMIN_USERNAME</code> e <code>ADMIN_PASSWORD</code>.</p>
+  </div>
+</section>
+{% endblock %}

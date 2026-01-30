@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Início{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="landing-grid">
+    <div class="search-banner card">
+      <form action="{{ url_for('search') }}" method="get" class="search-hero-form" autocomplete="off">
+        <div class="search-hero-input large">
+          <svg class="icon"><use href="#icon-search"></use></svg>
+          <input type="text" id="landing-search" name="q" placeholder="Pesquise por base, gestor ou ambiente" />
+          <button type="submit" class="button secondary"><svg class="icon"><use href="#icon-arrow-right"></use></svg><span>Buscar</span></button>
+        </div>
+        <div class="search-hero-suggestions" id="landing-suggestions" aria-live="polite"></div>
+      </form>
+    </div>
+
+    <div class="summary-row">
+      <div class="card progress-card">
+        <div class="card-head">
+          <p class="eyebrow">Progresso</p>
+          <span class="pill">{{ coverage_percent }}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: {{ coverage_percent }}%"></div>
+        </div>
+        <div class="progress-meta">
+          <div>
+            <p class="muted">Bases configuradas</p>
+            <p class="strong">{{ configured_bases }}</p>
+          </div>
+          <div>
+            <p class="muted">Com gestor padrão</p>
+            <p class="strong">{{ with_default_gestor }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="hero-card card">
+        <p class="stat-label">Resumo</p>
+        <p class="stat-value">{{ total_bases }} bases</p>
+        <p class="stat-helper">{{ total_gestors }} gestor(es) cadastrado(s)</p>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+  const landingSearch = document.getElementById('landing-search');
+  const landingSuggestions = document.getElementById('landing-suggestions');
+  let debounceTimer;
+
+  const renderSuggestions = (items = []) => {
+    landingSuggestions.innerHTML = '';
+    if (!items.length) {
+      landingSuggestions.classList.remove('open');
+      return;
+    }
+    items.forEach((item) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'suggestion-row';
+      button.innerHTML = `<span class="pill">${item.tipo}</span><span>${item.label}</span>`;
+      button.addEventListener('click', () => {
+        landingSearch.value = item.label;
+        landingSearch.form.submit();
+      });
+      landingSuggestions.appendChild(button);
+    });
+    landingSuggestions.classList.add('open');
+  };
+
+  const fetchSuggestions = (term) => {
+    if (!term || term.length < 2) {
+      renderSuggestions([]);
+      return;
+    }
+    fetch(`${window.location.origin}${"{{ url_for('search_suggestions') }}"}?q=${encodeURIComponent(term)}`)
+      .then((res) => res.json())
+      .then((data) => renderSuggestions(data.suggestions || []))
+      .catch(() => renderSuggestions([]));
+  };
+
+  if (landingSearch && landingSuggestions) {
+    landingSearch.addEventListener('input', (event) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => fetchSuggestions(event.target.value), 180);
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!landingSuggestions.contains(event.target) && event.target !== landingSearch) {
+        renderSuggestions([]);
+      }
+    });
+  }
+</script>
+{% endblock %}

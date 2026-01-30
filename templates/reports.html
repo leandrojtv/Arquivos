@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Relatórios | Gestão de Bases{% endblock %}
+{% block content %}
+<section class="section-header">
+  <p class="eyebrow">Relatórios</p>
+  <div class="section-heading">
+    <div>
+      <h2>Visão consolidada das bases</h2>
+      <p class="muted">Acompanhe cobertura de gestores, distribuição por coordenação e ambientes em tempo real.</p>
+    </div>
+    <div class="stat-actions">
+      <div class="stat-chips">
+        <div class="chip primary">
+          <svg class="icon"><use href="#icon-chart"></use></svg>
+          <div>
+            <p class="eyebrow">Bases registradas</p>
+            <strong>{{ total_bases }}</strong>
+          </div>
+        </div>
+        <div class="chip primary">
+          <svg class="icon"><use href="#icon-users"></use></svg>
+          <div>
+            <p class="eyebrow">Gestores cadastrados</p>
+            <strong>{{ total_gestors }}</strong>
+          </div>
+        </div>
+      </div>
+      <div class="layout-toggle">
+        <button id="toggleLayout" class="ghost" type="button" aria-pressed="false" aria-label="Alternar empilhamento de gráficos">
+          <svg class="icon"><use href="#icon-grid"></use></svg> <span class="toggle-label">Empilhar gráficos</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="reports-grid" id="reportsGrid" aria-label="Área para reordenar gráficos">
+  <div class="card chart-card draggable-card" data-card-id="coverage" draggable="true" aria-grabbed="false">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Cobertura</p>
+        <h3>Bases por gestor (Top 10)</h3>
+      </div>
+      <div class="card-actions">
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="coverageChart" aria-label="Gráfico de bases por gestor"></canvas>
+    </div>
+  </div>
+
+  <div class="card chart-card draggable-card" data-card-id="coord" draggable="true" aria-grabbed="false">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Panorama</p>
+        <h3>Bases por coordenação</h3>
+      </div>
+      <div class="card-actions">
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="coordChart" aria-label="Gráfico de bases por coordenação"></canvas>
+    </div>
+  </div>
+
+  <div class="card chart-card draggable-card" data-card-id="env" draggable="true" aria-grabbed="false">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Ambientes</p>
+        <h3>Bases por ambiente</h3>
+      </div>
+      <div class="card-actions">
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="envChart" aria-label="Gráfico de bases por ambiente"></canvas>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const coverageLabels = {{ coverage_labels|tojson }};
+  const coverageValues = {{ coverage_values|tojson }};
+  const coordLabels = {{ coord_labels|tojson }};
+  const coordValues = {{ coord_values|tojson }};
+  const envLabels = {{ env_labels|tojson }};
+  const envValues = {{ env_values|tojson }};
+
+  const palette = ["#0f6fed", "#7cc4ff", "#36a3f7", "#9dd5ff", "#1d9bf0", "#74a9f2", "#b7d8ff", "#5090ea"];
+  const envPalette = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#a855f7", "#06b6d4", "#f97316", "#14b8a6", "#6366f1", "#84cc16"];
+  const muted = "#cbd5e1";
+
+  const renderChart = (ctxId, config) => {
+    const ctx = document.getElementById(ctxId);
+    if (!ctx) return;
+    return new Chart(ctx, config);
+  };
+
+  const grid = document.getElementById("reportsGrid");
+  const orderKey = "reports-card-order";
+  const layoutKey = "reports-layout-mode";
+
+  const saveOrder = () => {
+    if (!grid) return;
+    const order = Array.from(grid.querySelectorAll(".draggable-card")).map((card) => card.dataset.cardId);
+    localStorage.setItem(orderKey, JSON.stringify(order));
+  };
+
+  const applySavedOrder = () => {
+    if (!grid) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(orderKey) || "[]");
+      saved.forEach((id) => {
+        const card = grid.querySelector(`[data-card-id="${id}"]`);
+        if (card) {
+          grid.appendChild(card);
+        }
+      });
+    } catch (err) {
+      console.warn("Não foi possível aplicar a ordem salva", err);
+    }
+  };
+
+  const applyLayout = () => {
+    if (!grid) return;
+    const toggle = document.getElementById("toggleLayout");
+    const mode = localStorage.getItem(layoutKey) || "grid";
+    const stacked = mode === "stacked";
+    grid.classList.toggle("stacked", stacked);
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", stacked ? "true" : "false");
+      const labelEl = toggle.querySelector(".toggle-label");
+      const iconUse = toggle.querySelector(".icon use");
+      if (labelEl) labelEl.textContent = stacked ? "Modo lado a lado" : "Empilhar gráficos";
+      if (iconUse) iconUse.setAttribute("href", stacked ? "#icon-stack" : "#icon-grid");
+    }
+  };
+
+  const setupLayoutToggle = () => {
+    const toggle = document.getElementById("toggleLayout");
+    if (!toggle) return;
+    toggle.addEventListener("click", () => {
+      const stacked = grid.classList.toggle("stacked");
+      localStorage.setItem(layoutKey, stacked ? "stacked" : "grid");
+      toggle.setAttribute("aria-pressed", stacked ? "true" : "false");
+      const labelEl = toggle.querySelector(".toggle-label");
+      const iconUse = toggle.querySelector(".icon use");
+      if (labelEl) labelEl.textContent = stacked ? "Modo lado a lado" : "Empilhar gráficos";
+      if (iconUse) iconUse.setAttribute("href", stacked ? "#icon-stack" : "#icon-grid");
+    });
+  };
+
+  const setupDragAndDrop = () => {
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll(".draggable-card"));
+
+    cards.forEach((card) => {
+      card.addEventListener("dragstart", (e) => {
+        card.classList.add("dragging");
+        card.setAttribute("aria-grabbed", "true");
+        e.dataTransfer.setData("text/plain", card.dataset.cardId);
+        e.dataTransfer.effectAllowed = "move";
+      });
+
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        card.setAttribute("aria-grabbed", "false");
+        grid.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+        saveOrder();
+      });
+
+      card.addEventListener("dragover", (e) => {
+        e.preventDefault();
+      });
+
+      card.addEventListener("dragenter", (e) => {
+        e.preventDefault();
+        if (!card.classList.contains("dragging")) {
+          card.classList.add("drag-over");
+        }
+      });
+
+      card.addEventListener("dragleave", () => {
+        card.classList.remove("drag-over");
+      });
+
+      card.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const sourceId = e.dataTransfer.getData("text/plain");
+        const sourceCard = grid.querySelector(`[data-card-id="${sourceId}"]`);
+        card.classList.remove("drag-over");
+        if (!sourceCard || sourceCard === card) return;
+
+        const children = Array.from(grid.children);
+        const targetIndex = children.indexOf(card);
+        const sourceIndex = children.indexOf(sourceCard);
+
+        if (sourceIndex < targetIndex) {
+          grid.insertBefore(sourceCard, card.nextSibling);
+        } else {
+          grid.insertBefore(sourceCard, card);
+        }
+
+        saveOrder();
+      });
+    });
+  };
+
+  renderChart("coverageChart", {
+    type: "bar",
+    data: {
+      labels: coverageLabels,
+      datasets: [
+        {
+          label: "Bases",
+          data: coverageValues,
+          backgroundColor: coverageLabels.map((_, idx) => palette[idx % palette.length]),
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, precision: 0 },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+
+  renderChart("coordChart", {
+    type: "bar",
+    data: {
+      labels: coordLabels,
+      datasets: [
+        {
+          label: "Bases",
+          data: coordValues,
+          backgroundColor: coordLabels.map((_, idx) => palette[idx % palette.length]),
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, precision: 0 },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+
+  renderChart("envChart", {
+    type: "doughnut",
+    data: {
+      labels: envLabels,
+      datasets: [
+        {
+          data: envValues,
+          backgroundColor: envLabels.map((_, idx) => envPalette[idx % envPalette.length]),
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { usePointStyle: true },
+        },
+      },
+      cutout: "55%",
+    },
+  });
+
+  applySavedOrder();
+  applyLayout();
+  setupDragAndDrop();
+  setupLayoutToggle();
+</script>
+{% endblock %}

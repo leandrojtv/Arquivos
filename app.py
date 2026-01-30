@@ -1,0 +1,3273 @@
+import csv
+import importlib
+import os
+import sqlite3
+import threading
+import unicodedata
+import uuid
+from datetime import datetime, time as dtime, timedelta
+from functools import wraps
+from io import BytesIO, StringIO
+from pathlib import Path
+
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from openpyxl import Workbook, load_workbook
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+LEGACY_DB = BASE_DIR / "people.db"
+TERADATA_DRIVER_DIR = Path(
+    os.environ.get("TERADATA_JDBC_DIR", BASE_DIR / "drivers" / "teradata")
+).resolve()
+if os.environ.get("DATABASE_PATH"):
+    DB_PATH = Path(os.environ["DATABASE_PATH"])
+elif LEGACY_DB.exists():
+    DB_PATH = LEGACY_DB
+else:
+    DB_PATH = DATA_DIR / "people.db"
+
+DB_PATH = DB_PATH.resolve()
+TERADATA_DRIVER_DIR.mkdir(parents=True, exist_ok=True)
+
+app = Flask(__name__)
+app.secret_key = "change-me"  # Needed for flash messages.
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
+IMPORT_CACHE = {}
+DEFAULT_EXTRACTOR_GESTOR = {
+    "name": "Gestor Padrão (Metadados)",
+    "secretaria": "Extrações",
+    "coordenacao": "Automático",
+    "email": "gestor.meta@exemplo.gov",
+}
+DAYS_OF_WEEK = [
+    ("mon", "Segunda"),
+    ("tue", "Terça"),
+    ("wed", "Quarta"),
+    ("thu", "Quinta"),
+    ("fri", "Sexta"),
+    ("sat", "Sábado"),
+    ("sun", "Domingo"),
+]
+SCHEDULER_STOP = threading.Event()
+SCHEDULER_THREAD = None
+
+
+def normalize_wildcard(term: str):
+    """Transforma um termo de busca em padrão SQL LIKE com suporte a * e ?."""
+    if term is None:
+        return None
+    has_wildcard = any(ch in term for ch in "*?")
+    pattern = []
+    for ch in term:
+        if ch == "*":
+            pattern.append("%")
+        elif ch == "?":
+            pattern.append("_")
+        elif ch in ("%", "_"):
+            pattern.append(f"\\{ch}")
+        else:
+            pattern.append(ch)
+    joined = "".join(pattern)
+    if not has_wildcard:
+        joined = f"%{joined}%"
+    return joined
+
+
+def normalize_filter_patterns(raw):
+    """Normaliza padrões de include/exclude (com * ou ?) para uso em SQL LIKE."""
+    if not raw:
+        return []
+    if isinstance(raw, (list, tuple)):
+        parts = raw
+    else:
+        parts = str(raw).replace(";", ",").split(",")
+    normalized = []
+    for part in parts:
+        text = str(part).strip()
+        if not text:
+            continue
+        buff = []
+        for ch in text:
+            if ch == "*":
+                buff.append("%")
+            elif ch == "?":
+                buff.append("_")
+            elif ch in ("%", "_"):
+                buff.append(f"\\{ch}")
+            else:
+                buff.append(ch)
+        normalized.append("".join(buff))
+    return normalized
+
+
+def init_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gestors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            secretaria TEXT NOT NULL,
+            coordenacao TEXT NOT NULL,
+            email TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS extraction_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            resource_id INTEGER,
+            connector TEXT NOT NULL,
+            extraction_type TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            log_level TEXT DEFAULT 'INFO',
+            include_filters TEXT,
+            exclude_filters TEXT,
+            host TEXT,
+            jdbc_url TEXT,
+            connection_type TEXT,
+            database_name TEXT,
+            password TEXT,
+            username TEXT,
+            extra_params TEXT,
+            schedule_id INTEGER,
+            run_once INTEGER DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending',
+            progress INTEGER NOT NULL DEFAULT 0,
+            log TEXT,
+            error TEXT,
+            next_run_at TEXT,
+            last_run_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (resource_id) REFERENCES extraction_resources(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS extraction_resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            connector TEXT NOT NULL,
+            extraction_type TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            log_level TEXT DEFAULT 'INFO',
+            include_filters TEXT,
+            exclude_filters TEXT,
+            host TEXT,
+            jdbc_url TEXT,
+            connection_type TEXT,
+            database_name TEXT,
+            password TEXT,
+            username TEXT,
+            extra_params TEXT,
+            schedule_id INTEGER,
+            run_once INTEGER DEFAULT 1,
+            next_run_at TEXT,
+            last_run_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (schedule_id) REFERENCES schedules(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            start_date TEXT,
+            start_time TEXT,
+            days_of_week TEXT,
+            interval_minutes INTEGER,
+            repeat_forever INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ambiente TEXT,
+            descricao TEXT,
+            gestor_id INTEGER NOT NULL,
+            substituto1_id INTEGER,
+            substituto2_id INTEGER,
+            current_perm_gb REAL,
+            max_perm_gb REAL,
+            free_space_gb REAL,
+            source_resource_id INTEGER,
+            source_connector TEXT NOT NULL DEFAULT 'manual',
+            source_job_id INTEGER,
+            last_updated_by TEXT,
+            last_updated_at TEXT,
+            FOREIGN KEY (gestor_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto2_id) REFERENCES gestors(id),
+            FOREIGN KEY (source_job_id) REFERENCES extraction_jobs(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO users (username, password)
+        VALUES (?, ?)
+        ON CONFLICT(username) DO UPDATE SET password=excluded.password
+        """,
+        (ADMIN_USERNAME, ADMIN_PASSWORD),
+    )
+    conn.commit()
+    ensure_default_extractor_gestor()
+    migrate_bases_nullable()
+    migrate_bases_sources()
+    migrate_base_sizes()
+    migrate_base_resource_links()
+    migrate_base_audit()
+    migrate_user_roles()
+    migrate_extraction_resources()
+    migrate_extraction_jobs()
+    conn.close()
+
+
+def migrate_bases_nullable():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    if not columns:
+        conn.close()
+        return
+
+    notnull_map = {col[1]: bool(col[3]) for col in columns}
+    needs_migration = any(
+        [
+            notnull_map.get("substituto1_id"),
+            notnull_map.get("substituto2_id"),
+            notnull_map.get("ambiente"),
+            notnull_map.get("descricao"),
+        ]
+    )
+
+    if not needs_migration:
+        conn.close()
+        return
+
+    conn.execute("ALTER TABLE bases RENAME TO bases_old")
+    conn.execute(
+        """
+        CREATE TABLE bases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ambiente TEXT,
+            descricao TEXT,
+            gestor_id INTEGER NOT NULL,
+            substituto1_id INTEGER,
+            substituto2_id INTEGER,
+            source_connector TEXT NOT NULL DEFAULT 'manual',
+            source_job_id INTEGER,
+            FOREIGN KEY (gestor_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto1_id) REFERENCES gestors(id),
+            FOREIGN KEY (substituto2_id) REFERENCES gestors(id),
+            FOREIGN KEY (source_job_id) REFERENCES extraction_jobs(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO bases (id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+        SELECT id, name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, 'manual', NULL FROM bases_old
+        """
+    )
+    conn.execute("DROP TABLE bases_old")
+    conn.commit()
+    conn.close()
+
+
+def migrate_bases_sources():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "source_connector" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN source_connector TEXT NOT NULL DEFAULT 'manual'")
+    if "source_job_id" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN source_job_id INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def migrate_base_sizes():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "current_perm_gb" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN current_perm_gb REAL")
+    if "max_perm_gb" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN max_perm_gb REAL")
+    if "free_space_gb" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN free_space_gb REAL")
+    conn.commit()
+    conn.close()
+
+
+def migrate_base_resource_links():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "source_resource_id" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN source_resource_id INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def migrate_base_audit():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "last_updated_by" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN last_updated_by TEXT")
+    if "last_updated_at" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN last_updated_at TEXT")
+    conn.commit()
+    conn.close()
+
+
+def migrate_user_roles():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(users)").fetchall()
+    names = {col[1] for col in columns}
+    if "role" not in names:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'leitor'")
+        conn.execute(
+            "UPDATE users SET role = 'admin' WHERE username = ?",
+            (ADMIN_USERNAME,),
+        )
+    conn.commit()
+    conn.close()
+
+
+def migrate_extraction_jobs():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(extraction_jobs)").fetchall()
+    names = {col[1] for col in columns}
+    if columns and "log_level" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN log_level TEXT DEFAULT 'INFO'")
+        conn.execute("UPDATE extraction_jobs SET log_level = 'INFO' WHERE log_level IS NULL")
+    if columns and "host" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN host TEXT")
+    if columns and "password" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN password TEXT")
+    if columns and "schedule_id" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN schedule_id INTEGER")
+    if columns and "run_once" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN run_once INTEGER DEFAULT 1")
+    if columns and "next_run_at" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN next_run_at TEXT")
+    if columns and "last_run_at" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN last_run_at TEXT")
+    if columns and "resource_id" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN resource_id INTEGER")
+    if columns and "include_filters" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN include_filters TEXT")
+    if columns and "exclude_filters" not in names:
+        conn.execute("ALTER TABLE extraction_jobs ADD COLUMN exclude_filters TEXT")
+    conn.commit()
+    conn.close()
+
+
+def migrate_extraction_resources():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(extraction_resources)").fetchall()
+    col_names = {c[1] for c in columns}
+    if columns and "log_level" not in col_names:
+        conn.execute("ALTER TABLE extraction_resources ADD COLUMN log_level TEXT DEFAULT 'INFO'")
+        conn.execute("UPDATE extraction_resources SET log_level = 'INFO' WHERE log_level IS NULL")
+    if not columns:
+        conn.close()
+        return
+
+    jobs = conn.execute("SELECT * FROM extraction_jobs WHERE resource_id IS NULL").fetchall()
+    for job in jobs:
+        name_hint = job["database_name"] or f"Recurso {job['id']}"
+        cur = conn.execute(
+            """
+            INSERT INTO extraction_resources (
+                name, connector, extraction_type, mode, log_level, include_filters, exclude_filters, host, jdbc_url, connection_type, database_name,
+                password, username, extra_params, schedule_id, run_once, next_run_at, last_run_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name_hint,
+                job["connector"],
+                job["extraction_type"],
+                job["mode"],
+                job["log_level"] if "log_level" in job.keys() else "INFO",
+                job["include_filters"] if "include_filters" in job.keys() else None,
+                job["exclude_filters"] if "exclude_filters" in job.keys() else None,
+                job["host"],
+                job["jdbc_url"],
+                job["connection_type"],
+                job["database_name"],
+                job["password"],
+                job["username"],
+                job["extra_params"],
+                job["schedule_id"],
+                job["run_once"],
+                job["next_run_at"],
+                job["last_run_at"],
+            ),
+        )
+        resource_id = cur.lastrowid
+        conn.execute(
+            "UPDATE extraction_jobs SET resource_id = ? WHERE id = ?",
+            (resource_id, job["id"]),
+        )
+    conn.commit()
+    conn.close()
+
+
+def ensure_default_extractor_gestor():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    existing = conn.execute(
+        "SELECT id FROM gestors WHERE email = ?", (DEFAULT_EXTRACTOR_GESTOR["email"],)
+    ).fetchone()
+    if existing:
+        conn.close()
+        return existing["id"]
+
+    cursor = conn.execute(
+        """
+        INSERT INTO gestors (name, secretaria, coordenacao, email)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            DEFAULT_EXTRACTOR_GESTOR["name"],
+            DEFAULT_EXTRACTOR_GESTOR["secretaria"],
+            DEFAULT_EXTRACTOR_GESTOR["coordenacao"],
+            DEFAULT_EXTRACTOR_GESTOR["email"],
+        ),
+    )
+    conn.commit()
+    gid = cursor.lastrowid
+    conn.close()
+    return gid
+
+
+def query_db(query, params=()):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.execute(query, params)
+    rows = cur.fetchall()
+    conn.commit()
+    conn.close()
+    return rows
+
+
+def execute_db(query, params=()):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(query, params)
+    conn.commit()
+    conn.close()
+
+
+def get_user_role(username):
+    if not username:
+        return None
+    row = query_db("SELECT role FROM users WHERE username = ?", (username,))
+    return row[0]["role"] if row else None
+
+
+def load_optional_module(module_name):
+    spec = importlib.util.find_spec(module_name)
+    if not spec:
+        return None
+    return importlib.import_module(module_name)
+
+
+def find_teradata_jars():
+    return [jar for jar in TERADATA_DRIVER_DIR.glob("*.jar") if jar.is_file()]
+
+
+def normalize_field(label: str) -> str:
+    cleaned = (
+        unicodedata.normalize("NFKD", label)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+        .replace(" ", "")
+        .replace("_", "")
+    )
+    return cleaned
+
+
+def bulk_upsert_gestors(records):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    for rec in records:
+        name, secretaria, coordenacao, email = rec
+        existing = cur.execute(
+            "SELECT id FROM gestors WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+        if existing:
+            cur.execute(
+                "UPDATE gestors SET secretaria = ?, coordenacao = ?, email = ? WHERE id = ?",
+                (secretaria, coordenacao, email, existing[0]),
+            )
+        else:
+            cur.execute(
+                "INSERT INTO gestors (name, secretaria, coordenacao, email) VALUES (?, ?, ?, ?)",
+                rec,
+            )
+    conn.commit()
+    conn.close()
+
+
+def bulk_upsert_bases(records, updated_by=None):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    updated_at = datetime.utcnow().isoformat() if updated_by else None
+    for rec in records:
+        if len(rec) == 6:
+            name, ambiente, descricao, gestor_id, sub1_id, sub2_id = rec
+            source_connector, source_job_id = "import", None
+        elif len(rec) == 7:
+            name, ambiente, descricao, gestor_id, sub1_id, sub2_id, source_job_id = rec
+            source_connector = None
+        else:
+            name, ambiente, descricao, gestor_id, sub1_id, sub2_id, source_connector, source_job_id = rec
+
+        existing = cur.execute(
+            "SELECT id FROM bases WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+
+        if existing:
+            if updated_by:
+                cur.execute(
+                    """
+                    UPDATE bases
+                    SET ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?,
+                        last_updated_by = ?, last_updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (ambiente, descricao, gestor_id, sub1_id, sub2_id, updated_by, updated_at, existing[0]),
+                )
+            else:
+                cur.execute(
+                    "UPDATE bases SET ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ? WHERE id = ?",
+                    (ambiente, descricao, gestor_id, sub1_id, sub2_id, existing[0]),
+                )
+        else:
+            if updated_by:
+                cur.execute(
+                    """
+                    INSERT INTO bases (
+                        name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id,
+                        source_connector, source_job_id, last_updated_by, last_updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        name,
+                        ambiente,
+                        descricao,
+                        gestor_id,
+                        sub1_id,
+                        sub2_id,
+                        source_connector or "import",
+                        source_job_id,
+                        updated_by,
+                        updated_at,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        name,
+                        ambiente,
+                        descricao,
+                        gestor_id,
+                        sub1_id,
+                        sub2_id,
+                        source_connector or "import",
+                        source_job_id,
+                    ),
+                )
+    conn.commit()
+    conn.close()
+
+
+def bulk_update_base_links(records, updated_by=None):
+    if not records:
+        return
+    conn = sqlite3.connect(DB_PATH)
+    if updated_by:
+        updated_at = datetime.utcnow().isoformat()
+        conn.executemany(
+            """
+            UPDATE bases
+            SET gestor_id = ?, substituto1_id = ?, substituto2_id = ?, last_updated_by = ?, last_updated_at = ?
+            WHERE id = ?
+            """,
+            [(g, s1, s2, updated_by, updated_at, bid) for (g, s1, s2, bid) in records],
+        )
+    else:
+        conn.executemany(
+            "UPDATE bases SET gestor_id = ?, substituto1_id = ?, substituto2_id = ? WHERE id = ?",
+            records,
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_import_bucket():
+    token = session.get("import_token")
+    if not token:
+        token = uuid.uuid4().hex
+        session["import_token"] = token
+    if token not in IMPORT_CACHE:
+        IMPORT_CACHE[token] = {}
+    return IMPORT_CACHE[token]
+
+
+def get_flow_bucket(flow):
+    bucket = get_import_bucket()
+    if flow not in bucket:
+        bucket[flow] = {}
+    return bucket[flow]
+
+
+def clear_import_state(flow=None):
+    bucket = get_import_bucket()
+    if flow:
+        bucket.pop(flow, None)
+    else:
+        bucket.clear()
+
+
+def create_extraction_job(
+    connector,
+    extraction_type,
+    mode,
+    config,
+    log_level="INFO",
+    include_filters=None,
+    exclude_filters=None,
+    resource_id=None,
+    schedule_id=None,
+    run_once=True,
+    status="pending",
+    next_run_at=None,
+):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        """
+        INSERT INTO extraction_jobs (resource_id, connector, extraction_type, mode, log_level, include_filters, exclude_filters, host, jdbc_url, connection_type, database_name, password, username, extra_params, schedule_id, run_once, status, next_run_at, last_run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            resource_id,
+            connector,
+            extraction_type,
+            mode,
+            log_level,
+            include_filters,
+            exclude_filters,
+            config.get("host"),
+            config.get("jdbc_url"),
+            config.get("connection_type"),
+            config.get("database_name"),
+            config.get("password"),
+            config.get("username"),
+            config.get("extra_params"),
+            schedule_id,
+            1 if run_once else 0,
+            status,
+            next_run_at,
+            None,
+        ),
+    )
+    conn.commit()
+    job_id = cur.lastrowid
+    conn.close()
+    return job_id
+
+
+def create_extraction_resource(name, connector, extraction_type, mode, config, schedule_id=None, run_once=True, next_run_at=None, log_level="INFO"):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        """
+        INSERT INTO extraction_resources (
+            name, connector, extraction_type, mode, log_level, include_filters, exclude_filters, host, jdbc_url, connection_type, database_name, password, username, extra_params,
+            schedule_id, run_once, next_run_at, last_run_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            name,
+            connector,
+            extraction_type,
+            mode,
+            log_level,
+            config.get("include_filters"),
+            config.get("exclude_filters"),
+            config.get("host"),
+            config.get("jdbc_url"),
+            config.get("connection_type"),
+            config.get("database_name"),
+            config.get("password"),
+            config.get("username"),
+            config.get("extra_params"),
+            schedule_id,
+            1 if run_once else 0,
+            next_run_at,
+            None,
+        ),
+    )
+    conn.commit()
+    rid = cur.lastrowid
+    conn.close()
+    return rid
+
+
+def update_extraction_resource(resource_id, *, name=None, connector=None, extraction_type=None, mode=None, log_level=None, config=None, schedule_id=None, run_once=None, next_run_at=None, last_run_at=None):
+    conn = sqlite3.connect(DB_PATH)
+    sets = []
+    params = []
+    if name is not None:
+        sets.append("name = ?")
+        params.append(name)
+    if connector is not None:
+        sets.append("connector = ?")
+        params.append(connector)
+    if extraction_type is not None:
+        sets.append("extraction_type = ?")
+        params.append(extraction_type)
+    if mode is not None:
+        sets.append("mode = ?")
+        params.append(mode)
+    if log_level is not None:
+        sets.append("log_level = ?")
+        params.append(log_level)
+    if config is not None:
+        sets.extend(
+            [
+                "include_filters = ?",
+                "exclude_filters = ?",
+                "host = ?",
+                "jdbc_url = ?",
+                "connection_type = ?",
+                "database_name = ?",
+                "password = ?",
+                "username = ?",
+                "extra_params = ?",
+            ]
+        )
+        params.extend(
+            [
+                config.get("include_filters"),
+                config.get("exclude_filters"),
+                config.get("host"),
+                config.get("jdbc_url"),
+                config.get("connection_type"),
+                config.get("database_name"),
+                config.get("password"),
+                config.get("username"),
+                config.get("extra_params"),
+            ]
+        )
+    if schedule_id is not None:
+        sets.append("schedule_id = ?")
+        params.append(schedule_id)
+    if run_once is not None:
+        sets.append("run_once = ?")
+        params.append(1 if run_once else 0)
+    if next_run_at is not None:
+        sets.append("next_run_at = ?")
+        params.append(next_run_at)
+    if last_run_at is not None:
+        sets.append("last_run_at = ?")
+        params.append(last_run_at)
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(resource_id)
+    conn.execute(f"UPDATE extraction_resources SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def update_extraction_job(
+    job_id,
+    status=None,
+    progress=None,
+    log=None,
+    error=None,
+    next_run_at=None,
+    last_run_at=None,
+    run_once=None,
+    log_level=None,
+    config=None,
+):
+    conn = sqlite3.connect(DB_PATH)
+    sets = []
+    params = []
+    if status is not None:
+        sets.append("status = ?")
+        params.append(status)
+    if progress is not None:
+        sets.append("progress = ?")
+        params.append(progress)
+    if log is not None:
+        sets.append("log = ?")
+        params.append(log)
+    if error is not None:
+        sets.append("error = ?")
+        params.append(error)
+    if log_level is not None:
+        sets.append("log_level = ?")
+        params.append(log_level)
+    if config is not None:
+        sets.extend(["include_filters = ?", "exclude_filters = ?"])
+        params.extend([config.get("include_filters"), config.get("exclude_filters")])
+    if next_run_at is not None:
+        sets.append("next_run_at = ?")
+        params.append(next_run_at)
+    if last_run_at is not None:
+        sets.append("last_run_at = ?")
+        params.append(last_run_at)
+    if run_once is not None:
+        sets.append("run_once = ?")
+        params.append(1 if run_once else 0)
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(job_id)
+    conn.execute(f"UPDATE extraction_jobs SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def append_job_log(job_id, message, reset=False):
+    LEVELS = {"ERROR": 40, "WARN": 30, "INFO": 20, "DEBUG": 10, "VERBOSE": 5}
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    existing = conn.execute(
+        "SELECT log, log_level FROM extraction_jobs WHERE id = ?", (job_id,)
+    ).fetchone()
+    threshold = (existing["log_level"] if existing else "INFO") or "INFO"
+    threshold_norm = threshold.upper()
+    level_norm = "INFO"
+    text = message
+    if isinstance(message, tuple) and len(message) == 2:
+        level_norm = str(message[0]).upper()
+        text = message[1]
+    elif isinstance(message, dict):
+        level_norm = str(message.get("level", "INFO")).upper()
+        text = message.get("message", "")
+    elif "|" in message:
+        # allow preformatted "LEVEL|text"
+        maybe_level, _, maybe_msg = message.partition("|")
+        if maybe_level.upper() in LEVELS:
+            level_norm = maybe_level.upper()
+            text = maybe_msg.strip()
+
+    level_score = LEVELS.get(level_norm, 20)
+    if level_score < LEVELS.get(threshold_norm, 20) and not reset:
+        conn.close()
+        return
+
+    stamp = datetime.utcnow().isoformat()
+    line = f"[{stamp}][{level_norm}] {text}" if text else f"[{stamp}][{level_norm}]"
+    current_log = existing["log"] if existing and existing["log"] else ""
+    new_log = line if reset or not current_log else f"{current_log}\n{line}"
+    conn.execute(
+        "UPDATE extraction_jobs SET log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (new_log, job_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_job(job_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    job = conn.execute("SELECT * FROM extraction_jobs WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    return job
+
+
+def get_resources():
+    return query_db("SELECT * FROM extraction_resources ORDER BY updated_at DESC")
+
+
+def get_resource(resource_id):
+    rows = query_db("SELECT * FROM extraction_resources WHERE id = ?", (resource_id,))
+    return rows[0] if rows else None
+
+
+def get_schedules():
+    return query_db("SELECT * FROM schedules ORDER BY name ASC")
+
+
+def get_schedule(schedule_id):
+    rows = query_db("SELECT * FROM schedules WHERE id = ?", (schedule_id,))
+    return rows[0] if rows else None
+
+
+def parse_schedule_form(form):
+    name = form.get("name", "").strip()
+    start_date = form.get("start_date", "").strip() or None
+    start_time = form.get("start_time", "").strip() or None
+    days = form.getlist("days_of_week")
+    days_clean = ",".join(sorted(set(days))) if days else None
+    interval_raw = form.get("interval_minutes", "").strip()
+    interval_minutes = None
+    if interval_raw:
+        try:
+            interval_minutes = int(interval_raw)
+        except ValueError:
+            interval_minutes = None
+    repeat_forever = 1 if form.get("repeat_forever") else 0
+    return {
+        "name": name,
+        "start_date": start_date,
+        "start_time": start_time,
+        "days_of_week": days_clean,
+        "interval_minutes": interval_minutes,
+        "repeat_forever": repeat_forever,
+    }
+
+
+def compute_next_run(schedule, after=None):
+    def sval(key):
+        try:
+            return schedule[key]
+        except Exception:
+            return schedule.get(key) if isinstance(schedule, dict) else None
+
+    after = after or datetime.utcnow()
+    allowed_days = None
+    days_raw = sval("days_of_week")
+    if days_raw:
+        allowed_days = {d.strip() for d in days_raw.split(",") if d.strip()}
+
+    def matches_day(dt):
+        if not allowed_days:
+            return True
+        return dt.strftime("%a").lower()[:3] in allowed_days
+
+    try:
+        base_date = (
+            datetime.strptime(sval("start_date"), "%Y-%m-%d").date()
+            if sval("start_date")
+            else after.date()
+        )
+    except ValueError:
+        base_date = after.date()
+
+    try:
+        base_time = (
+            datetime.strptime(sval("start_time"), "%H:%M").time()
+            if sval("start_time")
+            else dtime(hour=0, minute=0)
+        )
+    except ValueError:
+        base_time = dtime(hour=0, minute=0)
+
+    interval = sval("interval_minutes")
+    candidate = datetime.combine(base_date, base_time)
+
+    def bump_to_allowed(dt):
+        if matches_day(dt):
+            return dt
+        for i in range(1, 8):
+            shifted = dt + timedelta(days=i)
+            if matches_day(shifted):
+                return datetime.combine(shifted.date(), base_time)
+        return None
+
+    candidate = bump_to_allowed(candidate)
+    if not candidate:
+        return None
+
+    if candidate < after:
+        if interval:
+            delta = timedelta(minutes=interval)
+            safety = 0
+            while candidate < after and safety < 2000:
+                candidate += delta
+                if not matches_day(candidate):
+                    candidate = bump_to_allowed(candidate)
+                    if candidate is None:
+                        return None
+                safety += 1
+        else:
+            candidate = bump_to_allowed(datetime.combine(after.date(), base_time))
+            if candidate and candidate < after:
+                candidate = bump_to_allowed(candidate + timedelta(days=1))
+    return candidate
+
+
+def next_run_text(schedule, after=None):
+    nxt = compute_next_run(schedule, after=after)
+    return nxt.isoformat() if nxt else None
+
+
+def humanize_days(days_str):
+    if not days_str:
+        return "Todos os dias"
+    codes = set(days_str.split(","))
+    labels = [label for code, label in DAYS_OF_WEEK if code in codes]
+    return ", ".join(labels) if labels else "Dias livres"
+
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not session.get("user"):
+            flash("Faça login para continuar.", "error")
+            return redirect(url_for("login", next=request.path))
+        return view_func(*args, **kwargs)
+
+    return wrapper
+
+
+def role_required(*roles):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not session.get("user"):
+                flash("Faça login para continuar.", "error")
+                return redirect(url_for("login", next=request.path))
+            current_role = session.get("role") or get_user_role(session.get("user"))
+            if current_role not in roles:
+                flash("Você não tem permissão para acessar esta funcionalidade.", "error")
+                return redirect(url_for("landing"))
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def parse_csv(file_storage, delimiter):
+    content = file_storage.stream.read().decode("utf-8-sig")
+    reader = csv.DictReader(StringIO(content), delimiter=delimiter)
+    records = []
+    for row in reader:
+        normalized = {normalize_field(k): (v or "").strip() for k, v in row.items()}
+        name = normalized.get("gestor") or normalized.get("nome")
+        secretaria = normalized.get("secretaria")
+        coordenacao = normalized.get("coordenacao")
+        email = normalized.get("email")
+        if name and secretaria and coordenacao and email:
+            records.append((name, secretaria, coordenacao, email))
+    return records
+
+
+def parse_xlsx(file_storage):
+    file_bytes = BytesIO(file_storage.read())
+    workbook = load_workbook(filename=file_bytes, data_only=True)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return []
+    headers = [normalize_field(str(h)) for h in rows[0] if h is not None]
+    records = []
+    for data_row in rows[1:]:
+        values = [str(cell).strip() if cell is not None else "" for cell in data_row]
+        row_dict = {headers[i]: values[i] for i in range(min(len(headers), len(values)))}
+        name = row_dict.get("gestor") or row_dict.get("nome")
+        secretaria = row_dict.get("secretaria")
+        coordenacao = row_dict.get("coordenacao")
+        email = row_dict.get("email")
+        if name and secretaria and coordenacao and email:
+            records.append((name, secretaria, coordenacao, email))
+    return records
+
+
+def build_jdbc_url(host, database_name, connection_type, extra_params):
+    if not host:
+        return ""
+    suffix = []
+    if database_name:
+        suffix.append(f"DATABASE={database_name}")
+    if connection_type:
+        suffix.append(f"LOGMECH={connection_type}")
+    if extra_params:
+        cleaned = extra_params.strip().strip(",")
+        if cleaned:
+            suffix.append(cleaned)
+    formatted = ",".join(suffix)
+    return f"jdbc:teradata://{host}/{formatted}" if formatted else f"jdbc:teradata://{host}"
+
+
+def open_teradata_connection(config):
+    jdbc_url = config.get("jdbc_url")
+    username = config.get("username")
+    password = config.get("password")
+    if not jdbc_url or not username or not password:
+        raise ValueError("Preencha JDBC, usuário e senha para conectar.")
+
+    errors = []
+    teradatasql = load_optional_module("teradatasql")
+    if teradatasql:
+        try:
+            conn = teradatasql.connect(url=jdbc_url, user=username, password=password)
+            return conn, "python"
+        except Exception as exc:  # pragma: no cover - depende do driver
+            errors.append(f"Driver Python falhou: {exc}")
+
+    jdbc_jars = find_teradata_jars()
+    jaydebeapi = load_optional_module("jaydebeapi")
+    if not jdbc_jars:
+        errors.append(f"Driver JDBC não encontrado em {TERADATA_DRIVER_DIR}")
+    if not jaydebeapi:
+        errors.append("Dependências JDBC ausentes (jaydebeapi/JPype1 não instaladas)")
+    if jdbc_jars and jaydebeapi:
+        try:
+            conn = jaydebeapi.connect(
+                "com.teradata.jdbc.TeraDriver",
+                jdbc_url,
+                {"user": username, "password": password},
+                [str(j) for j in jdbc_jars],
+            )
+            return conn, "jdbc"
+        except Exception as exc:  # pragma: no cover - depende do driver
+            errors.append(f"Falha ao usar driver JDBC: {exc}")
+
+    if not errors:
+        errors.append("Driver Teradata não está disponível.")
+    raise RuntimeError("; ".join(errors))
+
+
+def test_teradata_connection(config):
+    try:
+        conn, _ = open_teradata_connection(config)
+        conn.close()
+        return True, "Conexão bem-sucedida."
+    except Exception as exc:  # pragma: no cover - ambiente varia
+        extra = ""
+        if not find_teradata_jars():
+            extra = f" Copie o JDBC para {TERADATA_DRIVER_DIR} e reinicie a aplicação."
+        return False, f"Não foi possível conectar: {exc}.{extra}" if str(exc) else "Falha ao conectar com o driver JDBC."
+
+
+def fetch_teradata_metadata(config):
+    try:
+        conn, _ = open_teradata_connection(config)
+        includes = normalize_filter_patterns(config.get("include_filters"))
+        excludes = normalize_filter_patterns(config.get("exclude_filters"))
+        filters = ["d.DBKind = 'D'"]
+        params = []
+        if includes:
+            filters.append("(" + " OR ".join(["d.DatabaseName LIKE ? ESCAPE '\\'"] * len(includes)) + ")")
+            params.extend(includes)
+        if excludes:
+            filters.extend(["d.DatabaseName NOT LIKE ? ESCAPE '\\'"] * len(excludes))
+            params.extend(excludes)
+        where_clause = " AND ".join(filters)
+        query = """
+          SELECT
+            d.DatabaseName,
+            COALESCE(d.CommentString, '') AS Description,
+            SUM(ds.CurrentPerm) / (1000 * 1000 * 1000) AS CurrentPerm_GB,
+            SUM(ds.MaxPerm) / (1000 * 1000 * 1000) AS MaxPerm_GB,
+            (SUM(ds.MaxPerm) - SUM(ds.CurrentPerm)) / (1000 * 1000 * 1000) AS FreeSpace_GB
+          FROM DBC.DatabasesV d
+          LEFT JOIN DBC.DiskSpaceV ds ON ds.DatabaseName = d.DatabaseName
+          WHERE {where_clause}
+          GROUP BY d.DatabaseName, Description
+          ORDER BY 1
+        """
+        cur = conn.cursor()
+        cur.execute(query.format(where_clause=where_clause), params)
+        rows = cur.fetchall()
+        conn.close()
+        return [
+            {
+                "DatabaseName": row[0],
+                "CommentString": row[1] if len(row) > 1 else "",
+                "CurrentPerm_GB": row[2] if len(row) > 2 else None,
+                "MaxPerm_GB": row[3] if len(row) > 3 else None,
+                "FreeSpace_GB": row[4] if len(row) > 4 else None,
+            }
+            for row in rows
+        ], None, None
+    except Exception as exc:
+        extra = ""
+        if not find_teradata_jars():
+            extra = f". Driver JDBC não encontrado em {TERADATA_DRIVER_DIR}"
+        return [], None, f"Falha ao extrair metadados: {exc}{extra}" if str(exc) else "Falha ao extrair metadados."
+
+
+def upsert_bases_from_metadata(rows, mode, job_id, gestor_id, resource_id=None):
+    imported = 0
+    errors = []
+
+    def to_float(val):
+        try:
+            return float(val) if val not in (None, "") else None
+        except Exception:
+            return None
+
+    if mode == "full":
+        if resource_id:
+            execute_db(
+                """
+                DELETE FROM bases
+                WHERE source_connector = 'teradata'
+                  AND (
+                    source_resource_id = ?
+                    OR (source_resource_id IS NULL AND source_job_id IN (
+                        SELECT id FROM extraction_jobs WHERE resource_id = ?
+                    ))
+                  )
+                """,
+                (resource_id, resource_id),
+            )
+        else:
+            execute_db("DELETE FROM bases WHERE source_connector = 'teradata'")
+
+    for entry in rows:
+        name = (entry.get("DatabaseName") or "").strip()
+        descricao = (entry.get("CommentString") or "").strip() or None
+        current_perm = to_float(entry.get("CurrentPerm_GB"))
+        max_perm = to_float(entry.get("MaxPerm_GB"))
+        free_space = to_float(entry.get("FreeSpace_GB"))
+
+        if not name:
+            errors.append("Linha ignorada por falta do nome do database.")
+            continue
+
+        existing = query_db(
+            "SELECT id, source_connector, source_resource_id FROM bases WHERE name = ?",
+            (name,),
+        )
+        if existing:
+            record = existing[0]
+            if record["source_connector"] not in (None, "teradata"):
+                errors.append(f"Base '{name}' foi criada manualmente/importada e não será sobrescrita.")
+                continue
+
+            try:
+                record_resource = record["source_resource_id"]
+            except Exception:
+                record_resource = record.get("source_resource_id") if isinstance(record, dict) else None
+
+            if record_resource and resource_id and record_resource != resource_id:
+                append_job_log(
+                    job_id,
+                    (
+                        "DEBUG",
+                        f"Base '{name}' pertence a outro recurso e foi mantida sem alterações.",
+                    ),
+                )
+                continue
+
+            if mode == "incremental":
+                append_job_log(
+                    job_id,
+                    (
+                        "DEBUG",
+                        f"Incremental: base '{name}' já existe e foi mantida sem alterações.",
+                    ),
+                )
+                continue
+
+            execute_db(
+                """
+                UPDATE bases
+                SET descricao = ?, gestor_id = ?, source_connector = 'teradata', source_job_id = ?,
+                    current_perm_gb = ?, max_perm_gb = ?, free_space_gb = ?, source_resource_id = ?
+                WHERE id = ?
+                """,
+                (
+                    descricao,
+                    gestor_id,
+                    job_id,
+                    current_perm,
+                    max_perm,
+                    free_space,
+                    resource_id,
+                    record["id"],
+                ),
+            )
+        else:
+            execute_db(
+                """
+                INSERT INTO bases (
+                    name,
+                    ambiente,
+                    descricao,
+                    gestor_id,
+                    substituto1_id,
+                    substituto2_id,
+                    current_perm_gb,
+                    max_perm_gb,
+                    free_space_gb,
+                    source_resource_id,
+                    source_connector,
+                    source_job_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'teradata', ?)
+                """,
+                (
+                    name,
+                    None,
+                    descricao,
+                    gestor_id,
+                    None,
+                    None,
+                    current_perm,
+                    max_perm,
+                    free_space,
+                    resource_id,
+                    job_id,
+                ),
+            )
+            imported += 1
+
+    return imported, errors
+
+
+def run_teradata_job(config, mode, extraction_type, job_id, resource_id=None):
+    append_job_log(job_id, ("INFO", "Iniciando extração de metadados do Teradata..."), reset=True)
+    update_extraction_job(job_id, status="running", progress=10, error=None)
+
+    rows, note, error_message = fetch_teradata_metadata(config)
+    if note:
+        append_job_log(job_id, ("INFO", note))
+    if error_message:
+        append_job_log(job_id, ("ERROR", error_message))
+        update_extraction_job(job_id, status="failed", progress=5, error=error_message)
+        return {
+            "total": 0,
+            "imported": 0,
+            "errors": [error_message],
+            "note": note,
+        }
+
+    append_job_log(job_id, ("DEBUG", "Processando bases extraídas..."))
+    update_extraction_job(job_id, progress=40)
+
+    gestor_id = ensure_default_extractor_gestor()
+    imported, errors = upsert_bases_from_metadata(rows, mode, job_id, gestor_id, resource_id)
+
+    progress = 100 if rows else 0
+    status = "success" if not errors else "completed"
+    error_text = "\n".join(errors) if errors else None
+
+    update_extraction_job(job_id, status=status, progress=progress, error=error_text)
+    append_job_log(job_id, ("INFO", f"Linhas recebidas: {len(rows)}. Bases aplicadas: {imported}."))
+    if errors:
+        append_job_log(job_id, ("WARN", "Ocorreram avisos durante a execução:"))
+        for err in errors:
+            append_job_log(job_id, ("WARN", f"- {err}"))
+
+    return {
+        "total": len(rows),
+        "imported": imported,
+        "errors": errors,
+        "note": note,
+    }
+
+
+def job_to_config(job):
+    def val(key):
+        try:
+            return job[key]
+        except Exception:
+            return job.get(key) if isinstance(job, dict) else None
+
+    return {
+        "host": val("host"),
+        "jdbc_url": val("jdbc_url"),
+        "connection_type": val("connection_type"),
+        "database_name": val("database_name"),
+        "username": val("username"),
+        "password": val("password"),
+        "extra_params": val("extra_params"),
+        "include_filters": val("include_filters"),
+        "exclude_filters": val("exclude_filters"),
+    }
+
+
+def finalize_next_run(job_id, job):
+    def val(key):
+        try:
+            return job[key]
+        except Exception:
+            return job.get(key) if isinstance(job, dict) else None
+
+    if val("run_once") or not val("schedule_id"):
+        update_extraction_job(job_id, next_run_at=None, run_once=True, last_run_at=datetime.utcnow().isoformat())
+        return
+
+    schedule = get_schedule(val("schedule_id"))
+    if not schedule:
+        update_extraction_job(job_id, next_run_at=None, run_once=True, last_run_at=datetime.utcnow().isoformat())
+        return
+
+    upcoming = next_run_text(schedule, after=datetime.utcnow())
+    params = {
+        "next_run_at": upcoming,
+        "last_run_at": datetime.utcnow().isoformat(),
+    }
+    def sval(key):
+        try:
+            return schedule[key]
+        except Exception:
+            return schedule.get(key) if isinstance(schedule, dict) else None
+
+    if not sval("repeat_forever") and not sval("interval_minutes"):
+        params["run_once"] = True
+    update_extraction_job(job_id, **params)
+
+
+def run_extraction_job(job):
+    job_id = job["id"] if isinstance(job, dict) or hasattr(job, "__getitem__") else job
+    job_row = job if isinstance(job, dict) else get_job(job_id)
+
+    def jval(key):
+        try:
+            return job_row[key]
+        except Exception:
+            return job_row.get(key) if isinstance(job_row, dict) else None
+    config = job_to_config(job_row)
+    update_extraction_job(job_row["id"], status="running", progress=0, error=None)
+    try:
+        result = run_teradata_job(
+            config,
+            job_row["mode"],
+            job_row["extraction_type"],
+            job_row["id"],
+            jval("resource_id"),
+        )
+    except Exception as exc:  # pragma: no cover - runtime guardrail
+        append_job_log(job_row["id"], ("ERROR", f"Erro inesperado: {exc}"))
+        update_extraction_job(job_row["id"], status="failed", progress=0, error=str(exc))
+        result = {"total": 0, "imported": 0, "errors": [str(exc)], "note": None}
+    finalize_next_run(job_row["id"], job_row)
+    return result
+
+
+def dispatch_due_jobs():
+    now = datetime.utcnow()
+    resources = query_db(
+        """
+        SELECT r.*, s.start_date as sched_start_date, s.start_time as sched_start_time, s.days_of_week as sched_days,
+               s.interval_minutes as sched_interval, s.repeat_forever as sched_repeat
+        FROM extraction_resources r
+        LEFT JOIN schedules s ON r.schedule_id = s.id
+        WHERE r.schedule_id IS NOT NULL AND r.run_once = 0 AND r.next_run_at IS NOT NULL
+        ORDER BY r.next_run_at ASC
+        """
+    )
+    for res in resources:
+        try:
+            due_at = datetime.fromisoformat(res["next_run_at"])
+        except Exception:
+            continue
+        if due_at > now:
+            continue
+        job_id = create_extraction_job(
+            res["connector"],
+            res["extraction_type"],
+            res["mode"],
+            {
+                "host": res["host"],
+                "jdbc_url": res["jdbc_url"],
+                "connection_type": res["connection_type"],
+                "database_name": res["database_name"],
+                "password": res["password"],
+                "username": res["username"],
+                "extra_params": res["extra_params"],
+                "include_filters": res["include_filters"] if "include_filters" in res.keys() else None,
+                "exclude_filters": res["exclude_filters"] if "exclude_filters" in res.keys() else None,
+            },
+            log_level=res["log_level"] if "log_level" in res.keys() else "INFO",
+            include_filters=res["include_filters"] if "include_filters" in res.keys() else None,
+            exclude_filters=res["exclude_filters"] if "exclude_filters" in res.keys() else None,
+            resource_id=res["id"],
+            schedule_id=res["schedule_id"],
+            run_once=True,
+            status="pending",
+        )
+        job = get_job(job_id)
+        run_extraction_job(job)
+        schedule_snapshot = {
+            "start_date": res["sched_start_date"],
+            "start_time": res["sched_start_time"],
+            "days_of_week": res["sched_days"],
+            "interval_minutes": res["sched_interval"],
+            "repeat_forever": res["sched_repeat"],
+        }
+        if schedule_snapshot.get("repeat_forever"):
+            next_run = compute_next_run(schedule_snapshot, after=datetime.utcnow())
+            update_extraction_resource(res["id"], next_run_at=next_run, last_run_at=datetime.utcnow().isoformat())
+        else:
+            update_extraction_resource(res["id"], next_run_at=None, last_run_at=datetime.utcnow().isoformat())
+
+
+def start_scheduler():
+    global SCHEDULER_THREAD
+    if SCHEDULER_THREAD and SCHEDULER_THREAD.is_alive():
+        return
+
+    def worker():
+        while not SCHEDULER_STOP.is_set():
+            try:
+                dispatch_due_jobs()
+            except Exception as exc:  # pragma: no cover - logging convenience
+                print(f"Scheduler error: {exc}")
+            SCHEDULER_STOP.wait(30)
+
+    SCHEDULER_THREAD = threading.Thread(target=worker, daemon=True)
+    SCHEDULER_THREAD.start()
+
+
+def parse_tabular(file_storage, delimiter):
+    filename = file_storage.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower()
+
+    if ext == "csv":
+        content = file_storage.stream.read().decode("utf-8-sig")
+        reader = csv.DictReader(StringIO(content), delimiter=delimiter or ";")
+        headers = [h or "Coluna" for h in (reader.fieldnames or [])]
+        rows = []
+        for row in reader:
+            rows.append({h: (row.get(h, "") or "").strip() for h in headers})
+        return headers, rows
+
+    if ext in {"xlsx", "xls"}:
+        file_bytes = BytesIO(file_storage.read())
+        workbook = load_workbook(filename=file_bytes, data_only=True)
+        sheet = workbook.active
+        excel_rows = list(sheet.iter_rows(values_only=True))
+        if not excel_rows:
+            return [], []
+        headers = [str(h) if h is not None else "Coluna" for h in excel_rows[0]]
+        rows = []
+        for data_row in excel_rows[1:]:
+            values = [str(cell).strip() if cell is not None else "" for cell in data_row]
+            mapped = {headers[i]: values[i] for i in range(min(len(headers), len(values)))}
+            rows.append(mapped)
+        return headers, rows
+
+    raise ValueError("Formato não suportado")
+
+
+def build_xlsx_response(headers, rows, filename):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(headers)
+    for row in rows:
+        ws.append(row)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = app.response_class(
+        output.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
+
+
+@app.route("/")
+@login_required
+def landing():
+    default_gestor_id = ensure_default_extractor_gestor()
+    total_bases = query_db("SELECT COUNT(*) as total FROM bases")[0]["total"]
+    total_gestors = query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"]
+    with_default_gestor = query_db(
+        "SELECT COUNT(*) as total FROM bases WHERE gestor_id = ?", (default_gestor_id,)
+    )[0]["total"]
+    configured_bases = max(total_bases - with_default_gestor, 0)
+    coverage_percent = round((configured_bases / total_bases) * 100, 1) if total_bases else 0
+
+    return render_template(
+        "landing.html",
+        total_bases=total_bases,
+        total_gestors=total_gestors,
+        with_default_gestor=with_default_gestor,
+        configured_bases=configured_bases,
+        coverage_percent=coverage_percent,
+    )
+
+
+@app.route("/relatorios")
+@login_required
+def reports():
+    def first_name_label(raw_label: str, limit: int = 12) -> str:
+        if not raw_label:
+            return "Sem gestor"
+        first = raw_label.strip().split(" ", 1)[0]
+        return (first[: limit - 1] + "…") if len(first) > limit else first
+
+    coverage_rows = query_db(
+        """
+        SELECT COALESCE(NULLIF(TRIM(g.name), ''), 'Sem gestor') AS label, COUNT(*) AS total
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        GROUP BY label
+        ORDER BY total DESC, label ASC
+        LIMIT 10
+        """
+    )
+    coord_rows = query_db(
+        """
+        SELECT COALESCE(g.coordenacao, 'Sem coordenação') as label, COUNT(*) as total
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        GROUP BY label
+        ORDER BY total DESC, label ASC
+        """
+    )
+    env_rows = query_db(
+        """
+        SELECT COALESCE(NULLIF(TRIM(ambiente), ''), 'Sem ambiente') as label, COUNT(*) as total
+        FROM bases
+        GROUP BY label
+        ORDER BY total DESC, label ASC
+        """
+    )
+
+    data = {
+        "total_gestors": query_db("SELECT COUNT(*) as total FROM gestors")[0]["total"],
+        "total_bases": query_db("SELECT COUNT(*) as total FROM bases")[0]["total"],
+        "coverage_labels": [first_name_label(row["label"]) for row in coverage_rows],
+        "coverage_values": [row["total"] for row in coverage_rows],
+        "coord_labels": [row["label"] or "Sem coordenação" for row in coord_rows],
+        "coord_values": [row["total"] for row in coord_rows],
+        "env_labels": [row["label"] or "Sem ambiente" for row in env_rows],
+        "env_values": [row["total"] for row in env_rows],
+    }
+
+    return render_template("reports.html", **data)
+
+
+def get_gestors(term=None):
+    if term:
+        like_term = normalize_wildcard(term)
+        return query_db(
+            """
+            SELECT * FROM gestors
+            WHERE name LIKE ? ESCAPE '\\' OR secretaria LIKE ? ESCAPE '\\' OR coordenacao LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'
+            ORDER BY name COLLATE NOCASE ASC
+            """,
+            (like_term, like_term, like_term, like_term),
+        )
+    return query_db("SELECT * FROM gestors ORDER BY name COLLATE NOCASE ASC")
+
+
+def parse_gestor_id(raw_value):
+    if not raw_value:
+        return None
+    candidate = raw_value.strip().split(" ", 1)[0]
+    try:
+        return int(candidate)
+    except ValueError:
+        return None
+
+
+def gestor_id_by_name(name):
+    if not name:
+        return None
+    result = query_db("SELECT id FROM gestors WHERE name = ? COLLATE NOCASE", (name.strip(),))
+    if result:
+        return result[0]["id"]
+    return None
+
+
+def base_id_by_name(name):
+    if not name:
+        return None
+    result = query_db("SELECT id FROM bases WHERE name = ? COLLATE NOCASE", (name.strip(),))
+    if result:
+        return result[0]["id"]
+    return None
+
+
+@app.route("/gestores")
+@login_required
+def list_gestors():
+    search_term = request.args.get("q", "").strip()
+    gestors = get_gestors(search_term)
+    return render_template("gestors.html", gestors=gestors, query=search_term)
+
+
+@app.route("/gestores/exportar")
+@login_required
+def export_gestors():
+    search_term = request.args.get("q", "").strip()
+    gestors = get_gestors(search_term)
+    headers = ["Nome", "Secretaria", "Coordenação", "E-mail"]
+    rows = [[g["name"], g["secretaria"], g["coordenacao"], g["email"]] for g in gestors]
+    return build_xlsx_response(headers, rows, "gestores_export.xlsx")
+
+
+@app.route("/gestores/<int:gestor_id>")
+@login_required
+def gestor_detail(gestor_id):
+    gestor_rows = query_db("SELECT * FROM gestors WHERE id = ?", (gestor_id,))
+    if not gestor_rows:
+        flash("Gestor não encontrado.", "error")
+        return redirect(url_for("list_gestors"))
+
+    bases = query_db(
+        """
+        SELECT b.*, CASE
+            WHEN b.gestor_id = ? THEN 'Titular'
+            WHEN b.substituto1_id = ? THEN '1º substituto'
+            WHEN b.substituto2_id = ? THEN '2º substituto'
+        END as papel
+        FROM bases b
+        WHERE b.gestor_id = ? OR b.substituto1_id = ? OR b.substituto2_id = ?
+        ORDER BY b.name COLLATE NOCASE ASC
+        """,
+        (gestor_id, gestor_id, gestor_id, gestor_id, gestor_id, gestor_id),
+    )
+
+    return render_template(
+        "gestor_detail.html",
+        gestor=gestor_rows[0],
+        bases=bases,
+    )
+
+
+@app.route("/gestores/novo")
+@login_required
+def new_gestor_form():
+    return render_template("gestor_form.html")
+
+
+@app.route("/gestores/criar", methods=["POST"])
+@login_required
+def add_gestor():
+    name = request.form.get("name", "").strip()
+    secretaria = request.form.get("secretaria", "").strip()
+    coordenacao = request.form.get("coordenacao", "").strip()
+    email = request.form.get("email", "").strip()
+
+    if not all([name, secretaria, coordenacao, email]):
+        flash("Preencha todos os campos do gestor.", "error")
+        return redirect(url_for("new_gestor_form"))
+
+    execute_db(
+        "INSERT INTO gestors (name, secretaria, coordenacao, email) VALUES (?, ?, ?, ?)",
+        (name, secretaria, coordenacao, email),
+    )
+    flash("Gestor cadastrado com sucesso.", "success")
+    return redirect(url_for("list_gestors"))
+
+
+@app.route("/gestores/<int:gestor_id>/editar")
+@login_required
+def edit_gestor(gestor_id):
+    gestor = query_db("SELECT * FROM gestors WHERE id = ?", (gestor_id,))
+    if not gestor:
+        flash("Gestor não encontrado.", "error")
+        return redirect(url_for("list_gestors"))
+    return render_template("gestor_form.html", gestor=gestor[0])
+
+
+@app.route("/gestores/<int:gestor_id>/atualizar", methods=["POST"])
+@login_required
+def update_gestor(gestor_id):
+    name = request.form.get("name", "").strip()
+    secretaria = request.form.get("secretaria", "").strip()
+    coordenacao = request.form.get("coordenacao", "").strip()
+    email = request.form.get("email", "").strip()
+
+    if not all([name, secretaria, coordenacao, email]):
+        flash("Preencha todos os campos do gestor.", "error")
+        return redirect(url_for("edit_gestor", gestor_id=gestor_id))
+
+    execute_db(
+        "UPDATE gestors SET name = ?, secretaria = ?, coordenacao = ?, email = ? WHERE id = ?",
+        (name, secretaria, coordenacao, email, gestor_id),
+    )
+    flash("Gestor atualizado.", "success")
+    return redirect(url_for("list_gestors"))
+
+
+@app.route("/gestores/<int:gestor_id>/remover", methods=["POST"])
+@login_required
+def delete_gestor(gestor_id):
+    in_use = query_db(
+        "SELECT COUNT(*) as total FROM bases WHERE gestor_id = ? OR substituto1_id = ? OR substituto2_id = ?",
+        (gestor_id, gestor_id, gestor_id),
+    )[0]["total"]
+    if in_use:
+        flash("Não é possível remover: gestor vinculado a bases.", "error")
+        return redirect(url_for("list_gestors"))
+
+    execute_db("DELETE FROM gestors WHERE id = ?", (gestor_id,))
+    flash("Gestor removido.", "success")
+    return redirect(url_for("list_gestors"))
+
+
+def gestor_choices(term=None):
+    return [
+        {
+            "id": g["id"],
+            "label": f"{g['id']} - {g['name']} ({g['secretaria']} / {g['coordenacao']})",
+        }
+        for g in get_gestors(term)
+    ]
+
+
+def selected_labels_from_base(base_row, options):
+    label_map = {opt["id"]: opt["label"] for opt in options}
+    return {
+        "gestor": label_map.get(base_row["gestor_id"], ""),
+        "sub1": label_map.get(base_row["substituto1_id"], ""),
+        "sub2": label_map.get(base_row["substituto2_id"], ""),
+    }
+
+
+def ensure_gestor_exists(gestor_id, field_label):
+    if not gestor_id:
+        flash(f"Selecione um {field_label} válido a partir da lista.", "error")
+        return False
+    exists = query_db("SELECT id FROM gestors WHERE id = ?", (gestor_id,))
+    if not exists:
+        flash(f"{field_label} não encontrado.", "error")
+        return False
+    return True
+
+
+@app.route("/bases")
+@login_required
+def list_bases():
+    query = request.args.get("q", "").strip()
+    records = get_filtered_bases(query, "", "", "", "", "")
+    return render_template("bases.html", bases=records, query=query)
+
+
+@app.route("/bases/<int:base_id>")
+@login_required
+def base_detail(base_id):
+    rows = query_db(
+        """
+        SELECT b.*, g.name as gestor_name, gs1.name as sub1_name, gs2.name as sub2_name
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        LEFT JOIN gestors gs1 ON gs1.id = b.substituto1_id
+        LEFT JOIN gestors gs2 ON gs2.id = b.substituto2_id
+        WHERE b.id = ?
+        """,
+        (base_id,),
+    )
+    if not rows:
+        flash("Base não encontrada.", "error")
+        return redirect(url_for("list_bases"))
+
+    return render_template("base_detail.html", base=rows[0])
+
+
+@app.route("/bases/nova")
+@login_required
+def new_base_form():
+    options = gestor_choices()
+    if not options:
+        flash("Cadastre pelo menos um gestor antes de criar bases.", "error")
+        return redirect(url_for("new_gestor_form"))
+    return render_template("base_form.html", gestors=options, selected_labels=None)
+
+
+@app.route("/bases/criar", methods=["POST"])
+@login_required
+def add_base():
+    name = request.form.get("name", "").strip()
+    ambiente = request.form.get("ambiente", "").strip()
+    descricao = request.form.get("descricao", "").strip()
+    gestor_id = parse_gestor_id(request.form.get("gestor_id", ""))
+    sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
+    sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
+
+    if not name:
+        flash("Informe o nome da base.", "error")
+        return redirect(url_for("new_base_form"))
+
+    if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
+        return redirect(url_for("new_base_form"))
+
+    if sub1_id and not ensure_gestor_exists(sub1_id, "1º substituto"):
+        return redirect(url_for("new_base_form"))
+    if sub2_id and not ensure_gestor_exists(sub2_id, "2º substituto"):
+        return redirect(url_for("new_base_form"))
+
+    if sub1_id and sub2_id and sub1_id == sub2_id:
+        flash("Substitutos precisam ser pessoas diferentes.", "error")
+        return redirect(url_for("new_base_form"))
+    if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+        flash("Gestor titular não pode repetir um substituto.", "error")
+        return redirect(url_for("new_base_form"))
+
+    execute_db(
+        """
+        INSERT INTO bases (
+            name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id,
+            source_connector, last_updated_by, last_updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            name,
+            ambiente or None,
+            descricao or None,
+            gestor_id,
+            sub1_id,
+            sub2_id,
+            "manual",
+            session.get("user"),
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    flash("Base cadastrada com sucesso.", "success")
+    return redirect(url_for("list_bases"))
+
+
+@app.route("/bases/<int:base_id>/editar")
+@login_required
+def edit_base(base_id):
+    record = query_db("SELECT * FROM bases WHERE id = ?", (base_id,))
+    if not record:
+        flash("Base não encontrada.", "error")
+        return redirect(url_for("list_bases"))
+    options = gestor_choices()
+    labels = selected_labels_from_base(record[0], options)
+    return render_template("base_form.html", base=record[0], gestors=options, selected_labels=labels)
+
+
+@app.route("/bases/<int:base_id>/atualizar", methods=["POST"])
+@login_required
+def update_base(base_id):
+    name = request.form.get("name", "").strip()
+    ambiente = request.form.get("ambiente", "").strip()
+    descricao = request.form.get("descricao", "").strip()
+    gestor_id = parse_gestor_id(request.form.get("gestor_id", ""))
+    sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
+    sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
+
+    if not name:
+        flash("Informe o nome da base.", "error")
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    if sub1_id and not ensure_gestor_exists(sub1_id, "1º substituto"):
+        return redirect(url_for("edit_base", base_id=base_id))
+    if sub2_id and not ensure_gestor_exists(sub2_id, "2º substituto"):
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    if sub1_id and sub2_id and sub1_id == sub2_id:
+        flash("Substitutos precisam ser pessoas diferentes.", "error")
+        return redirect(url_for("edit_base", base_id=base_id))
+    if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+        flash("Gestor titular não pode repetir um substituto.", "error")
+        return redirect(url_for("edit_base", base_id=base_id))
+
+    execute_db(
+        """
+        UPDATE bases
+        SET name = ?, ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?,
+            last_updated_by = ?, last_updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            name,
+            ambiente or None,
+            descricao or None,
+            gestor_id,
+            sub1_id,
+            sub2_id,
+            session.get("user"),
+            datetime.utcnow().isoformat(),
+            base_id,
+        ),
+    )
+    flash("Base atualizada.", "success")
+    return redirect(url_for("list_bases"))
+
+
+def get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao):
+    conditions = []
+    params = []
+
+    if term:
+        like_term = normalize_wildcard(term)
+        conditions.append(
+            "(b.name LIKE ? ESCAPE '\\' OR COALESCE(b.descricao, '') LIKE ? ESCAPE '\\' OR COALESCE(b.ambiente, '') LIKE ? ESCAPE '\\' OR COALESCE(g.name, '') LIKE ? ESCAPE '\\')"
+        )
+        params.extend([like_term, like_term, like_term, like_term])
+    if gestor:
+        conditions.append("g.name LIKE ? ESCAPE '\\'")
+        params.append(normalize_wildcard(gestor))
+    if base_nome:
+        conditions.append("b.name LIKE ? ESCAPE '\\'")
+        params.append(normalize_wildcard(base_nome))
+    if descricao:
+        conditions.append("COALESCE(b.descricao, '') LIKE ? ESCAPE '\\'")
+        params.append(normalize_wildcard(descricao))
+    if ambiente:
+        conditions.append("b.ambiente = ?")
+        params.append(ambiente)
+    if fonte:
+        conditions.append("b.source_connector = ?")
+        params.append(fonte)
+
+    query = """
+        SELECT b.*, g.name as gestor_name, s1.name as sub1_name, s2.name as sub2_name
+        FROM bases b
+        LEFT JOIN gestors g ON g.id = b.gestor_id
+        LEFT JOIN gestors s1 ON s1.id = b.substituto1_id
+        LEFT JOIN gestors s2 ON s2.id = b.substituto2_id
+    """
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY b.id DESC"
+    return query_db(query, tuple(params))
+
+
+@app.route("/bases/<int:base_id>/remover", methods=["POST"])
+@login_required
+def delete_base(base_id):
+    execute_db("DELETE FROM bases WHERE id = ?", (base_id,))
+    flash("Base removida.", "success")
+    return redirect(url_for("list_bases"))
+
+
+@app.route("/buscar")
+@login_required
+def search():
+    term = request.args.get("q", "").strip()
+    tipo = request.args.get("tipo", "bases").strip()
+    gestor = request.args.get("gestor", "").strip()
+    base_nome = request.args.get("base", "").strip()
+    ambiente = request.args.get("ambiente", "").strip()
+    fonte = request.args.get("fonte", "").strip()
+    descricao = request.args.get("descricao", "").strip()
+
+    should_search = any([term, gestor, base_nome, ambiente, fonte, descricao])
+    results = get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao) if (should_search and tipo == "bases") else []
+
+    ambientes = query_db(
+        "SELECT DISTINCT ambiente FROM bases WHERE ambiente IS NOT NULL AND ambiente != '' ORDER BY ambiente"
+    )
+    fontes = query_db(
+        "SELECT DISTINCT source_connector FROM bases WHERE source_connector IS NOT NULL AND source_connector != '' ORDER BY source_connector"
+    )
+    gestores = query_db(
+        "SELECT DISTINCT name FROM gestors WHERE name IS NOT NULL AND name != '' ORDER BY name"
+    )
+
+    return render_template(
+        "search.html",
+        query=term,
+        results=results,
+        filters={
+            "tipo": tipo,
+            "gestor": gestor,
+            "base": base_nome,
+            "ambiente": ambiente,
+            "fonte": fonte,
+            "descricao": descricao,
+        },
+        options={
+            "ambientes": [row["ambiente"] for row in ambientes],
+            "fontes": [row["source_connector"] for row in fontes],
+            "gestores": [row["name"] for row in gestores],
+        },
+    )
+
+
+@app.route("/buscar/sugestoes")
+@login_required
+def search_suggestions():
+    term = request.args.get("q", "").strip()
+    suggestions = []
+    if term:
+        like = f"%{term}%"
+        base_rows = query_db(
+            "SELECT DISTINCT name FROM bases WHERE name LIKE ? ORDER BY name LIMIT 5", (like,)
+        )
+        gestor_rows = query_db(
+            "SELECT DISTINCT name FROM gestors WHERE name LIKE ? ORDER BY name LIMIT 5", (like,)
+        )
+        ambiente_rows = query_db(
+            "SELECT DISTINCT ambiente FROM bases WHERE ambiente LIKE ? AND ambiente IS NOT NULL ORDER BY ambiente LIMIT 5",
+            (like,),
+        )
+        for row in base_rows:
+            suggestions.append({"label": row["name"], "tipo": "Base"})
+        for row in gestor_rows:
+            suggestions.append({"label": row["name"], "tipo": "Gestor"})
+        for row in ambiente_rows:
+            suggestions.append({"label": row["ambiente"], "tipo": "Ambiente"})
+
+    return jsonify({"suggestions": suggestions})
+
+
+@app.route("/buscar/exportar")
+@login_required
+def export_bases_search():
+    term = request.args.get("q", "").strip()
+    gestor = request.args.get("gestor", "").strip()
+    base_nome = request.args.get("base", "").strip()
+    ambiente = request.args.get("ambiente", "").strip()
+    fonte = request.args.get("fonte", "").strip()
+    descricao = request.args.get("descricao", "").strip()
+
+    results = get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao)
+    headers = [
+        "Base",
+        "Ambiente",
+        "Descrição",
+        "Gestor titular",
+        "1º substituto",
+        "2º substituto",
+    ]
+    rows = []
+    for base in results:
+        rows.append(
+            [
+                base["name"],
+                base["ambiente"] or "",
+                base["descricao"] or "",
+                base["gestor_name"] or "",
+                base["sub1_name"] or "",
+                base["sub2_name"] or "",
+            ]
+        )
+
+    return build_xlsx_response(headers, rows, "bases_export.xlsx")
+
+
+@app.route("/importar", methods=["GET", "POST"])
+@login_required
+def import_records():
+    return render_template("import.html")
+
+
+@app.route("/importar/gestores/modelo")
+@login_required
+def download_gestor_template():
+    headers = ["Nome", "Secretaria", "Coordenação", "E-mail"]
+    rows = [["Maria Oliveira", "Secretaria de Dados", "Coordenação A", "maria@exemplo.com"]]
+    return build_xlsx_response(headers, rows, "modelo_gestores.xlsx")
+
+
+@app.route("/importar/bases/modelo")
+@login_required
+def download_bases_template():
+    headers = [
+        "Base",
+        "Ambiente",
+        "Descrição",
+        "Gestor titular",
+        "1º substituto",
+        "2º substituto",
+    ]
+    rows = [["Data Warehouse", "Produção", "Repositório principal", "Maria Oliveira", "João Silva", "Ana Souza"]]
+    return build_xlsx_response(headers, rows, "modelo_bases.xlsx")
+
+
+@app.route("/importar/relacionamentos/modelo")
+@login_required
+def download_relationships_template():
+    headers = ["Base", "Gestor titular", "1º substituto", "2º substituto"]
+    rows = [["Data Lake", "Maria Oliveira", "", ""]]
+    return build_xlsx_response(headers, rows, "modelo_relacionamentos.xlsx")
+
+
+def require_import_data(flow):
+    bucket = get_flow_bucket(flow)
+    headers = bucket.get("headers") or []
+    rows = bucket.get("rows") or []
+    if not headers or not rows:
+        flash("Envie um arquivo para começar o fluxo de importação.", "error")
+        clear_import_state(flow)
+        return None, None
+    return headers, rows
+
+
+@app.route("/importar/gestores", methods=["GET", "POST"])
+@login_required
+def import_gestors_flow():
+    step = request.args.get("step", "upload")
+    flow = "gestores"
+    bucket = get_flow_bucket(flow)
+
+    if request.method == "POST" and step == "upload":
+        upload = request.files.get("file")
+        delimiter = request.form.get("delimiter", ";").strip() or ";"
+
+        if not upload or not upload.filename:
+            flash("Selecione um arquivo CSV ou XLSX para continuar.", "error")
+            return redirect(url_for("import_gestors_flow"))
+
+        try:
+            headers, rows = parse_tabular(upload, delimiter)
+        except Exception:
+            flash("Não foi possível ler o arquivo. Confirme o formato e o delimitador.", "error")
+            return redirect(url_for("import_gestors_flow"))
+
+        if not rows:
+            flash("Nenhuma linha encontrada para importar.", "error")
+            return redirect(url_for("import_gestors_flow"))
+
+        bucket["headers"] = headers
+        bucket["rows"] = rows
+        bucket.pop("mapping", None)
+        bucket.pop("result", None)
+        return redirect(url_for("import_gestors_flow", step="mapear"))
+
+    if request.method == "POST" and step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_gestors_flow"))
+
+        mapping = {
+            "name": request.form.get("map_name"),
+            "secretaria": request.form.get("map_secretaria"),
+            "coordenacao": request.form.get("map_coordenacao"),
+            "email": request.form.get("map_email"),
+        }
+
+        if not all(mapping.values()):
+            flash("Mapeie todas as colunas obrigatórias para seguir.", "error")
+            return redirect(url_for("import_gestors_flow", step="mapear"))
+
+        bucket["mapping"] = mapping
+        return redirect(url_for("import_gestors_flow", step="confirmar"))
+
+    if request.method == "POST" and step == "executar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_gestors_flow"))
+
+        total = len(rows)
+        imported = 0
+        errors = []
+        prepared = []
+
+        header_set = set(headers)
+        for row in rows:
+            missing_cols = [col for col in mapping.values() if col not in header_set]
+            if missing_cols:
+                errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
+                break
+
+            name = row.get(mapping["name"], "").strip()
+            secretaria = row.get(mapping["secretaria"], "").strip()
+            coordenacao = row.get(mapping["coordenacao"], "").strip()
+            email = row.get(mapping["email"], "").strip()
+
+            if not all([name, secretaria, coordenacao, email]):
+                errors.append("Linha ignorada por falta de campos obrigatórios.")
+                continue
+
+            prepared.append((name, secretaria, coordenacao, email))
+
+        if prepared:
+            bulk_upsert_gestors(prepared)
+            imported = len(prepared)
+
+        bucket["result"] = {
+            "total": total,
+            "imported": imported,
+            "errors": errors,
+            "progress": 100 if total else 0,
+        }
+        bucket["rows"] = prepared
+        return redirect(url_for("import_gestors_flow", step="resultado"))
+
+    if step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_gestors_flow"))
+        return render_template("import_gestors.html", step="mapear", headers=headers, preview=rows[:5])
+
+    if step == "confirmar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_gestors_flow"))
+
+        preview = []
+        for row in rows[:5]:
+            preview.append(
+                {
+                    "name": row.get(mapping.get("name"), ""),
+                    "secretaria": row.get(mapping.get("secretaria"), ""),
+                    "coordenacao": row.get(mapping.get("coordenacao"), ""),
+                    "email": row.get(mapping.get("email"), ""),
+                }
+            )
+
+        return render_template(
+            "import_gestors.html",
+            step="confirmar",
+            mapping=mapping,
+            preview=preview,
+            total=len(rows),
+        )
+
+    if step == "resultado":
+        result = bucket.get("result")
+        if not result:
+            return redirect(url_for("import_gestors_flow"))
+        return render_template("import_gestors.html", step="resultado", result=result)
+
+    clear_import_state(flow)
+    return render_template("import_gestors.html", step="upload")
+
+
+@app.route("/importar/bases", methods=["GET", "POST"])
+@login_required
+def import_bases_flow():
+    step = request.args.get("step", "upload")
+    flow = "bases"
+    bucket = get_flow_bucket(flow)
+
+    if request.method == "POST" and step == "upload":
+        upload = request.files.get("file")
+        delimiter = request.form.get("delimiter", ";").strip() or ";"
+
+        if not upload or not upload.filename:
+            flash("Selecione um arquivo CSV ou XLSX para continuar.", "error")
+            return redirect(url_for("import_bases_flow"))
+
+        try:
+            headers, rows = parse_tabular(upload, delimiter)
+        except Exception:
+            flash("Não foi possível ler o arquivo. Confirme o formato e o delimitador.", "error")
+            return redirect(url_for("import_bases_flow"))
+
+        if not rows:
+            flash("Nenhuma linha encontrada para importar.", "error")
+            return redirect(url_for("import_bases_flow"))
+
+        bucket["headers"] = headers
+        bucket["rows"] = rows
+        bucket.pop("mapping", None)
+        bucket.pop("result", None)
+        return redirect(url_for("import_bases_flow", step="mapear"))
+
+    if request.method == "POST" and step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_bases_flow"))
+
+        mapping = {
+            "name": request.form.get("map_name"),
+            "ambiente": request.form.get("map_ambiente"),
+            "descricao": request.form.get("map_descricao"),
+            "gestor": request.form.get("map_gestor"),
+            "sub1": request.form.get("map_sub1"),
+            "sub2": request.form.get("map_sub2"),
+        }
+
+        required_fields = [mapping["name"], mapping["gestor"]]
+        if not all(required_fields):
+            flash("Mapeie ao menos Base e Gestor titular para continuar.", "error")
+            return redirect(url_for("import_bases_flow", step="mapear"))
+
+        bucket["mapping"] = mapping
+        return redirect(url_for("import_bases_flow", step="confirmar"))
+
+    if request.method == "POST" and step == "executar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_bases_flow"))
+
+        total = len(rows)
+        imported = 0
+        errors = []
+        prepared = []
+
+        header_set = set(headers)
+        required_map = [mapping["name"], mapping["gestor"]]
+
+        for row in rows:
+            missing_cols = [col for col in required_map if col not in header_set]
+            optional_cols = [
+                mapping.get("ambiente"),
+                mapping.get("descricao"),
+                mapping.get("sub1"),
+                mapping.get("sub2"),
+            ]
+            missing_optional = [col for col in optional_cols if col and col not in header_set]
+            if missing_cols or missing_optional:
+                errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
+                break
+
+            name = row.get(mapping["name"], "").strip()
+            ambiente = row.get(mapping["ambiente"], "").strip() if mapping.get("ambiente") else ""
+            descricao = row.get(mapping["descricao"], "").strip() if mapping.get("descricao") else ""
+            gestor_name = row.get(mapping["gestor"], "").strip()
+            sub1_name = row.get(mapping.get("sub1"), "").strip() if mapping.get("sub1") else ""
+            sub2_name = row.get(mapping.get("sub2"), "").strip() if mapping.get("sub2") else ""
+
+            if not all([name, gestor_name]):
+                errors.append("Linha ignorada por falta de base ou gestor titular.")
+                continue
+
+            gestor_id = gestor_id_by_name(gestor_name)
+            if not gestor_id:
+                errors.append(f"Gestor '{gestor_name}' não encontrado.")
+                continue
+
+            sub1_id = None
+            sub2_id = None
+
+            if sub1_name:
+                sub1_id = gestor_id_by_name(sub1_name)
+                if not sub1_id:
+                    errors.append(f"1º substituto '{sub1_name}' não encontrado.")
+                    continue
+
+            if sub2_name:
+                sub2_id = gestor_id_by_name(sub2_name)
+                if not sub2_id:
+                    errors.append(f"2º substituto '{sub2_name}' não encontrado.")
+                    continue
+
+            if sub1_id and sub2_id and sub1_id == sub2_id:
+                errors.append("Substitutos precisam ser pessoas diferentes.")
+                continue
+            if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+                errors.append("Gestor titular não pode repetir um substituto.")
+                continue
+
+            prepared.append((name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id))
+
+        if prepared:
+            bulk_upsert_bases(prepared, session.get("user"))
+            imported = len(prepared)
+
+        bucket["result"] = {
+            "total": total,
+            "imported": imported,
+            "errors": errors,
+            "progress": 100 if total else 0,
+        }
+        bucket["rows"] = prepared
+        return redirect(url_for("import_bases_flow", step="resultado"))
+
+    if step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_bases_flow"))
+        return render_template("import_bases.html", step="mapear", headers=headers, preview=rows[:5])
+
+    if step == "confirmar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_bases_flow"))
+
+        preview = []
+        for row in rows[:5]:
+            preview.append(
+                {
+                    "name": row.get(mapping.get("name"), ""),
+                    "ambiente": row.get(mapping.get("ambiente"), "") if mapping.get("ambiente") else "",
+                    "descricao": row.get(mapping.get("descricao"), "") if mapping.get("descricao") else "",
+                    "gestor": row.get(mapping.get("gestor"), ""),
+                    "sub1": row.get(mapping.get("sub1"), ""),
+                    "sub2": row.get(mapping.get("sub2"), ""),
+                }
+            )
+
+        return render_template(
+            "import_bases.html",
+            step="confirmar",
+            mapping=mapping,
+            preview=preview,
+            total=len(rows),
+        )
+
+    if step == "resultado":
+        result = bucket.get("result")
+        if not result:
+            return redirect(url_for("import_bases_flow"))
+        return render_template("import_bases.html", step="resultado", result=result)
+
+    clear_import_state(flow)
+    return render_template("import_bases.html", step="upload")
+
+
+@app.route("/importar/relacionamentos", methods=["GET", "POST"])
+@login_required
+def import_relationships_flow():
+    step = request.args.get("step", "upload")
+    flow = "relacionamentos"
+    bucket = get_flow_bucket(flow)
+
+    if request.method == "POST" and step == "upload":
+        upload = request.files.get("file")
+        delimiter = request.form.get("delimiter", ";").strip() or ";"
+
+        if not upload or not upload.filename:
+            flash("Selecione um arquivo CSV ou XLSX para continuar.", "error")
+            return redirect(url_for("import_relationships_flow"))
+
+        try:
+            headers, rows = parse_tabular(upload, delimiter)
+        except Exception:
+            flash("Não foi possível ler o arquivo. Confirme o formato e o delimitador.", "error")
+            return redirect(url_for("import_relationships_flow"))
+
+        if not rows:
+            flash("Nenhuma linha encontrada para importar.", "error")
+            return redirect(url_for("import_relationships_flow"))
+
+        bucket["headers"] = headers
+        bucket["rows"] = rows
+        bucket.pop("mapping", None)
+        bucket.pop("result", None)
+        return redirect(url_for("import_relationships_flow", step="mapear"))
+
+    if request.method == "POST" and step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_relationships_flow"))
+
+        mapping = {
+            "base": request.form.get("map_base"),
+            "gestor": request.form.get("map_gestor"),
+            "sub1": request.form.get("map_sub1"),
+            "sub2": request.form.get("map_sub2"),
+        }
+
+        if not mapping["base"] or not mapping["gestor"]:
+            flash("Mapeie pelo menos base e gestor para seguir.", "error")
+            return redirect(url_for("import_relationships_flow", step="mapear"))
+
+        bucket["mapping"] = mapping
+        return redirect(url_for("import_relationships_flow", step="confirmar"))
+
+    if request.method == "POST" and step == "executar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_relationships_flow"))
+
+        total = len(rows)
+        imported = 0
+        errors = []
+        prepared = []
+        header_set = set(headers)
+
+        for row in rows:
+            missing_cols = [col for col in mapping.values() if col and col not in header_set]
+            if missing_cols:
+                errors.append("Arquivo mudou: colunas mapeadas não foram encontradas.")
+                break
+
+            base_name = row.get(mapping["base"], "").strip()
+            gestor_name = row.get(mapping["gestor"], "").strip()
+            sub1_name = row.get(mapping["sub1"], "").strip() if mapping.get("sub1") else ""
+            sub2_name = row.get(mapping["sub2"], "").strip() if mapping.get("sub2") else ""
+
+            if not base_name or not gestor_name:
+                errors.append("Linha ignorada por falta de base ou gestor titular.")
+                continue
+
+            base_id = base_id_by_name(base_name)
+            if not base_id:
+                errors.append(f"Base '{base_name}' não encontrada.")
+                continue
+
+            gestor_id = gestor_id_by_name(gestor_name)
+            if not gestor_id:
+                errors.append(f"Gestor '{gestor_name}' não encontrado.")
+                continue
+
+            sub1_id = None
+            sub2_id = None
+
+            if sub1_name:
+                sub1_id = gestor_id_by_name(sub1_name)
+                if not sub1_id:
+                    errors.append(f"1º substituto '{sub1_name}' não encontrado.")
+                    continue
+
+            if sub2_name:
+                sub2_id = gestor_id_by_name(sub2_name)
+                if not sub2_id:
+                    errors.append(f"2º substituto '{sub2_name}' não encontrado.")
+                    continue
+
+            if sub1_id and sub2_id and sub1_id == sub2_id:
+                errors.append("Substitutos precisam ser pessoas diferentes.")
+                continue
+            if gestor_id and (gestor_id == sub1_id or gestor_id == sub2_id):
+                errors.append("Gestor titular não pode repetir um substituto.")
+                continue
+
+            prepared.append((gestor_id, sub1_id, sub2_id, base_id))
+
+        if prepared:
+            bulk_update_base_links(prepared, session.get("user"))
+            imported = len(prepared)
+
+        bucket["result"] = {
+            "total": total,
+            "imported": imported,
+            "errors": errors,
+            "progress": 100 if total else 0,
+        }
+        bucket["rows"] = prepared
+        return redirect(url_for("import_relationships_flow", step="resultado"))
+
+    if step == "mapear":
+        headers, rows = require_import_data(flow)
+        if headers is None:
+            return redirect(url_for("import_relationships_flow"))
+        return render_template(
+            "import_relationships.html", step="mapear", headers=headers, preview=rows[:5]
+        )
+
+    if step == "confirmar":
+        headers, rows = require_import_data(flow)
+        mapping = bucket.get("mapping")
+        if headers is None or not mapping:
+            return redirect(url_for("import_relationships_flow"))
+
+        preview = []
+        for row in rows[:5]:
+            preview.append(
+                {
+                    "base": row.get(mapping.get("base"), ""),
+                    "gestor": row.get(mapping.get("gestor"), ""),
+                    "sub1": row.get(mapping.get("sub1"), "") if mapping.get("sub1") else "",
+                    "sub2": row.get(mapping.get("sub2"), "") if mapping.get("sub2") else "",
+                }
+            )
+
+        return render_template(
+            "import_relationships.html",
+            step="confirmar",
+            mapping=mapping,
+            preview=preview,
+            total=len(rows),
+        )
+
+    if step == "resultado":
+        result = bucket.get("result")
+        if not result:
+            return redirect(url_for("import_relationships_flow"))
+        return render_template("import_relationships.html", step="resultado", result=result)
+
+    clear_import_state(flow)
+    return render_template("import_relationships.html", step="upload")
+
+
+@app.route("/extracao")
+@login_required
+def extraction_menu():
+    resources = get_resources()
+    schedules = {s["id"]: s for s in get_schedules()}
+    return render_template("extract.html", resources=resources, schedules=schedules, humanize_days=humanize_days)
+
+
+def prefill_from_job(job_id, bucket):
+    job = get_job(job_id)
+    if not job:
+        return
+    bucket["config"] = {
+        "host": job["host"] or "",
+        "jdbc_url": job["jdbc_url"] or "",
+        "connection_type": job["connection_type"] or "TD2",
+        "database_name": job["database_name"] or "",
+        "username": job["username"] or "",
+        "password": job["password"] or "",
+        "extra_params": job["extra_params"] or "",
+    }
+    bucket["mode"] = job["mode"] or "incremental"
+    bucket["extraction_type"] = job["extraction_type"] or "metadata"
+    bucket["schedule_id"] = job["schedule_id"]
+    bucket["run_once"] = bool(job["run_once"]) if job["run_once"] is not None else True
+    bucket["log_level"] = (job["log_level"] or "INFO") if "log_level" in job.keys() else "INFO"
+    bucket["include_filters"] = job["include_filters"] if "include_filters" in job.keys() else ""
+    bucket["exclude_filters"] = job["exclude_filters"] if "exclude_filters" in job.keys() else ""
+
+
+def prefill_from_resource(resource_id, bucket):
+    res = get_resource(resource_id)
+    if not res:
+        return
+    bucket["resource_id"] = res["id"]
+    bucket["resource_name"] = res["name"]
+    bucket["config"] = {
+        "host": res["host"] or "",
+        "jdbc_url": res["jdbc_url"] or "",
+        "connection_type": res["connection_type"] or "TD2",
+        "database_name": res["database_name"] or "",
+        "username": res["username"] or "",
+        "password": res["password"] or "",
+        "extra_params": res["extra_params"] or "",
+    }
+    bucket["mode"] = res["mode"] or "incremental"
+    bucket["extraction_type"] = res["extraction_type"] or "metadata"
+    bucket["schedule_id"] = res["schedule_id"]
+    bucket["run_once"] = bool(res["run_once"]) if res["run_once"] is not None else True
+    bucket["next_run_at"] = res["next_run_at"]
+    bucket["log_level"] = (res["log_level"] or "INFO") if "log_level" in res.keys() else "INFO"
+    bucket["include_filters"] = res["include_filters"] if "include_filters" in res.keys() else ""
+    bucket["exclude_filters"] = res["exclude_filters"] if "exclude_filters" in res.keys() else ""
+
+
+@app.route("/extracao/teradata", methods=["GET", "POST"])
+@login_required
+def extract_teradata():
+    step = request.args.get("step", "config")
+    flow = "extracao_teradata"
+    bucket = get_flow_bucket(flow)
+    job_id_param = request.args.get("job_id")
+    resource_id_param = request.args.get("resource_id")
+    if not bucket.get("log_level"):
+        bucket["log_level"] = "INFO"
+
+    if resource_id_param and not bucket.get("config"):
+        try:
+            prefill_from_resource(int(resource_id_param), bucket)
+        except ValueError:
+            pass
+    elif job_id_param and not bucket.get("config"):
+        try:
+            prefill_from_job(int(job_id_param), bucket)
+        except ValueError:
+            pass
+
+    if request.method == "POST" and step == "config":
+        resource_name = request.form.get("resource_name", "").strip() or "Recurso Teradata"
+        manual_jdbc = request.form.get("jdbc_url", "").strip()
+        host = request.form.get("host", "").strip()
+        database_name = request.form.get("database_name", "").strip()
+        connection_type = request.form.get("connection_type", "TD2").strip() or "TD2"
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        extra_params = request.form.get("extra_params", "").strip()
+        log_level = request.form.get("log_level", bucket.get("log_level", "INFO")) or "INFO"
+        jdbc_url = manual_jdbc or build_jdbc_url(host, database_name, connection_type, extra_params)
+
+        bucket["resource_name"] = resource_name
+        bucket["config"] = {
+            "host": host,
+            "jdbc_url": jdbc_url,
+            "connection_type": connection_type,
+            "database_name": database_name,
+            "username": username,
+            "password": password,
+            "extra_params": extra_params,
+        }
+        bucket["log_level"] = log_level.upper()
+
+        if request.form.get("action") == "test":
+            ok, message = test_teradata_connection(bucket["config"])
+            flash(message, "success" if ok else "error")
+            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param, resource_id=resource_id_param))
+
+        if not jdbc_url or not username or not password:
+            flash("Preencha JDBC, usuário e senha para continuar.", "error")
+            return redirect(url_for("extract_teradata", step="config", job_id=job_id_param, resource_id=resource_id_param))
+
+        return redirect(url_for("extract_teradata", step="tipos"))
+
+    if step == "tipos":
+        if not bucket.get("config"):
+            flash("Configure a conexão antes de selecionar o tipo.", "error")
+            return redirect(url_for("extract_teradata"))
+
+        if request.method == "POST":
+            bucket["extraction_type"] = request.form.get("extraction_type", "metadata")
+            bucket["mode"] = request.form.get("mode", "incremental")
+            bucket["include_filters"] = request.form.get("include_filters", "").strip()
+            bucket["exclude_filters"] = request.form.get("exclude_filters", "").strip()
+            return redirect(url_for("extract_teradata", step="agenda", resource_id=resource_id_param))
+        return render_template("extract_teradata.html", step="tipos", bucket=bucket)
+
+    if step == "agenda":
+        if not bucket.get("config"):
+            flash("Configure a conexão antes de selecionar o schedule.", "error")
+            return redirect(url_for("extract_teradata"))
+
+        schedules = get_schedules()
+        if request.method == "POST":
+            execution_plan = request.form.get("execution_plan", "once")
+            if execution_plan == "once":
+                bucket["run_once"] = True
+                bucket["schedule_id"] = None
+                return redirect(url_for("extract_teradata", step="executar"))
+
+            schedule_id = request.form.get("schedule_id")
+            try:
+                sid = int(schedule_id) if schedule_id else None
+            except (TypeError, ValueError):
+                sid = None
+            if not sid or not get_schedule(sid):
+                flash("Escolha um schedule válido ou marque execução única.", "error")
+                return redirect(url_for("extract_teradata", step="agenda", resource_id=resource_id_param))
+            bucket["run_once"] = False
+            bucket["schedule_id"] = sid
+            return redirect(url_for("extract_teradata", step="executar", resource_id=resource_id_param))
+
+        return render_template(
+            "extract_teradata.html",
+            step="agenda",
+            bucket=bucket,
+            schedules=schedules,
+            humanize_days=humanize_days,
+        )
+
+    if step == "executar":
+        if not bucket.get("config"):
+            flash("Configure a conexão antes de executar.", "error")
+            return redirect(url_for("extract_teradata"))
+
+        if request.method == "POST":
+            action = request.form.get("action", "execute")
+            config = {
+                **bucket.get("config", {}),
+                "include_filters": bucket.get("include_filters", ""),
+                "exclude_filters": bucket.get("exclude_filters", ""),
+            }
+            extraction_type = bucket.get("extraction_type", "metadata")
+            mode = bucket.get("mode", "incremental")
+            schedule_id = bucket.get("schedule_id")
+            run_once = bucket.get("run_once", True)
+            status = "pending"
+            next_run_at = None
+            bucket["next_run_at"] = None
+
+            schedule = get_schedule(schedule_id) if schedule_id else None
+            if not run_once and schedule:
+                next_run_at = next_run_text(schedule)
+                status = "scheduled"
+                bucket["next_run_at"] = next_run_at
+            
+            resource_name = bucket.get("resource_name") or "Recurso Teradata"
+            resource_id = bucket.get("resource_id")
+            if resource_id:
+                update_extraction_resource(
+                    resource_id,
+                    name=resource_name,
+                    connector="teradata",
+                    extraction_type=extraction_type,
+                    mode=mode,
+                    log_level=bucket.get("log_level", "INFO"),
+                    config=config,
+                    schedule_id=schedule_id,
+                    run_once=run_once,
+                    next_run_at=next_run_at,
+                )
+            else:
+                resource_id = create_extraction_resource(
+                    resource_name,
+                    "teradata",
+                    extraction_type,
+                    mode,
+                    config,
+                    log_level=bucket.get("log_level", "INFO"),
+                    schedule_id=schedule_id,
+                    run_once=run_once,
+                    next_run_at=next_run_at,
+                )
+                bucket["resource_id"] = resource_id
+
+            if action == "save":
+                bucket["result"] = {
+                    "resource_id": resource_id,
+                    "saved_only": True,
+                    "next_run_at": next_run_at,
+                    "status": status,
+                }
+                flash("Recurso salvo. Use Executar para criar um job.", "success")
+                return redirect(url_for("extract_teradata", step="executar", resource_id=resource_id))
+
+            job_id = create_extraction_job(
+                "teradata",
+                extraction_type,
+                mode,
+                config,
+                log_level=bucket.get("log_level", "INFO"),
+                include_filters=bucket.get("include_filters", ""),
+                exclude_filters=bucket.get("exclude_filters", ""),
+                resource_id=resource_id,
+                schedule_id=schedule_id,
+                run_once=True,
+                status="pending",
+            )
+            job = get_job(job_id)
+            result = run_extraction_job(job)
+            bucket["result"] = {"job_id": job_id, "resource_id": resource_id, **result}
+            flash(
+                "Extração finalizada.",
+                "success" if not result["errors"] else "warning",
+            )
+            return redirect(url_for("extract_teradata", step="executar", resource_id=resource_id))
+
+        selected_schedule = None
+        if not bucket.get("run_once") and bucket.get("schedule_id"):
+            selected_schedule = get_schedule(bucket["schedule_id"])
+
+        return render_template(
+            "extract_teradata.html",
+            step="executar",
+            bucket=bucket,
+            selected_schedule=selected_schedule,
+            humanize_days=humanize_days,
+            jdbc_preview=bucket.get("config", {}).get("jdbc_url"),
+            connection_summary={
+                "database": bucket.get("config", {}).get("database_name"),
+                "host": bucket.get("config", {}).get("host"),
+                "type": bucket.get("config", {}).get("connection_type"),
+                "user": bucket.get("config", {}).get("username"),
+            },
+            resource_id=bucket.get("resource_id"),
+        )
+
+    if step == "config":
+        return render_template("extract_teradata.html", step="config", bucket=bucket)
+
+    clear_import_state(flow)
+    return render_template("extract_teradata.html", step="config", bucket=bucket)
+
+
+@app.route("/configuracoes")
+@login_required
+def settings():
+    users = query_db("SELECT id, username, role FROM users ORDER BY username ASC")
+    return render_template("settings.html", users=users)
+
+
+@app.route("/schedules", methods=["GET", "POST"])
+@login_required
+def schedules():
+    edit_id = request.args.get("edit")
+    edit_schedule = None
+    if edit_id:
+        try:
+            edit_schedule = get_schedule(int(edit_id))
+        except ValueError:
+            edit_schedule = None
+
+    if request.method == "POST":
+        data = parse_schedule_form(request.form)
+        if not data["name"]:
+            flash("Informe um nome para o schedule.", "error")
+            return redirect(url_for("schedules"))
+
+        schedule_id = request.form.get("schedule_id")
+        if schedule_id:
+            try:
+                sid = int(schedule_id)
+            except ValueError:
+                sid = None
+            if not sid:
+                flash("Schedule inválido.", "error")
+                return redirect(url_for("schedules"))
+            execute_db(
+                """
+                UPDATE schedules
+                SET name = ?, start_date = ?, start_time = ?, days_of_week = ?, interval_minutes = ?, repeat_forever = ?
+                WHERE id = ?
+                """,
+                (
+                    data["name"],
+                    data["start_date"],
+                    data["start_time"],
+                    data["days_of_week"],
+                    data["interval_minutes"],
+                    data["repeat_forever"],
+                    sid,
+                ),
+            )
+            flash("Schedule atualizado.", "success")
+        else:
+            execute_db(
+                """
+                INSERT INTO schedules (name, start_date, start_time, days_of_week, interval_minutes, repeat_forever)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data["name"],
+                    data["start_date"],
+                    data["start_time"],
+                    data["days_of_week"],
+                    data["interval_minutes"],
+                    data["repeat_forever"],
+                ),
+            )
+            flash("Schedule criado.", "success")
+        return redirect(url_for("schedules"))
+
+    schedules_rows = get_schedules()
+    schedule_cards = []
+    for sched in schedules_rows:
+        schedule_cards.append(
+            {
+                "id": sched["id"],
+                "name": sched["name"],
+                "start_date": sched["start_date"],
+                "start_time": sched["start_time"],
+                "days_of_week": sched["days_of_week"],
+                "days_label": humanize_days(sched["days_of_week"]),
+                "interval": sched["interval_minutes"],
+                "repeat_forever": bool(sched["repeat_forever"]),
+            }
+        )
+
+    return render_template(
+        "schedules.html",
+        schedules=schedule_cards,
+        days_options=DAYS_OF_WEEK,
+        edit_schedule=edit_schedule,
+    )
+
+
+@app.route("/schedules/<int:schedule_id>/delete", methods=["POST"])
+@login_required
+def delete_schedule(schedule_id):
+    execute_db("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+    flash("Schedule removido.", "success")
+    return redirect(url_for("schedules"))
+
+
+@app.route("/jobs")
+@login_required
+def monitor_jobs():
+    jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
+    schedules = {sched["id"]: sched for sched in get_schedules()}
+    resources = {res["id"]: res for res in get_resources()}
+    return render_template("jobs.html", jobs=jobs, schedules=schedules, resources=resources, humanize_days=humanize_days)
+
+
+@app.route("/jobs/table")
+@login_required
+def jobs_table_partial():
+    jobs = query_db("SELECT * FROM extraction_jobs ORDER BY created_at DESC")
+    schedules = {sched["id"]: sched for sched in get_schedules()}
+    resources = {res["id"]: res for res in get_resources()}
+    return render_template("jobs_table.html", jobs=jobs, schedules=schedules, resources=resources, humanize_days=humanize_days)
+
+
+@app.route("/jobs/<int:job_id>/restart", methods=["POST"])
+@login_required
+def restart_job(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("Job não encontrado.", "error")
+        return redirect(url_for("monitor_jobs"))
+
+    update_extraction_job(job_id, status="pending", progress=0, error=None)
+    result = run_extraction_job(job)
+    flash(
+        "Job reiniciado.",
+        "success" if not result.get("errors") else "warning",
+    )
+    return redirect(url_for("monitor_jobs"))
+
+
+@app.route("/jobs/<int:job_id>/editar")
+@login_required
+def edit_job(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("Job não encontrado.", "error")
+        return redirect(url_for("monitor_jobs"))
+    flash("Configuração carregada no fluxo de extração.", "info")
+    if job["resource_id"]:
+        return redirect(url_for("extract_teradata", resource_id=job["resource_id"]))
+    return redirect(url_for("extract_teradata", job_id=job_id))
+
+
+@app.route("/jobs/<int:job_id>/logs")
+@login_required
+def download_logs(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("Job não encontrado.", "error")
+        return redirect(url_for("monitor_jobs"))
+    content = job["log"] or "Sem logs disponíveis."
+    response = app.response_class(content, mimetype="text/plain")
+    response.headers["Content-Disposition"] = f"attachment; filename=job_{job_id}_logs.txt"
+    return response
+
+
+@app.route("/resources/<int:resource_id>/run", methods=["POST"])
+@login_required
+def run_resource(resource_id):
+    res = get_resource(resource_id)
+    if not res:
+        flash("Recurso não encontrado.", "error")
+        return redirect(url_for("extraction_menu"))
+    job_id = create_extraction_job(
+        res["connector"],
+        res["extraction_type"],
+        res["mode"],
+        {
+            "host": res["host"],
+            "jdbc_url": res["jdbc_url"],
+            "connection_type": res["connection_type"],
+            "database_name": res["database_name"],
+            "password": res["password"],
+            "username": res["username"],
+            "extra_params": res["extra_params"],
+            "include_filters": res["include_filters"] if "include_filters" in res.keys() else None,
+            "exclude_filters": res["exclude_filters"] if "exclude_filters" in res.keys() else None,
+        },
+        log_level=res["log_level"] if "log_level" in res.keys() else "INFO",
+        include_filters=res["include_filters"] if "include_filters" in res.keys() else None,
+        exclude_filters=res["exclude_filters"] if "exclude_filters" in res.keys() else None,
+        resource_id=resource_id,
+        schedule_id=res["schedule_id"],
+    )
+    job = get_job(job_id)
+    result = run_extraction_job(job)
+    flash(
+        "Execução iniciada para o recurso.",
+        "success" if not result.get("errors") else "warning",
+    )
+    return redirect(url_for("monitor_jobs"))
+
+
+@app.route("/usuarios/criar", methods=["POST"])
+@login_required
+@role_required("admin")
+def create_user():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    role = request.form.get("role", "leitor").strip().lower() or "leitor"
+    if role not in ("admin", "gestor", "leitor"):
+        flash("Perfil inválido.", "error")
+        return redirect(url_for("settings"))
+
+    if not username or not password:
+        flash("Preencha usuário e senha para adicionar.", "error")
+        return redirect(url_for("settings"))
+
+    try:
+        execute_db(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            (username, password, role),
+        )
+    except sqlite3.IntegrityError:
+        flash("Nome de usuário já existe.", "error")
+        return redirect(url_for("settings"))
+
+    flash("Usuário criado com sucesso.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/usuarios/<int:user_id>/resetar", methods=["POST"])
+@login_required
+@role_required("admin")
+def reset_user(user_id):
+    password = request.form.get("password", "")
+    if not password:
+        flash("Informe uma nova senha para continuar.", "error")
+        return redirect(url_for("settings"))
+
+    execute_db("UPDATE users SET password = ? WHERE id = ?", (password, user_id))
+    flash("Senha atualizada.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/usuarios/<int:user_id>/remover", methods=["POST"])
+@login_required
+@role_required("admin")
+def delete_user(user_id):
+    user = query_db("SELECT username FROM users WHERE id = ?", (user_id,))
+    if not user:
+        flash("Usuário não encontrado.", "error")
+        return redirect(url_for("settings"))
+
+    username = user[0]["username"]
+    if username == session.get("user"):
+        flash("Não é possível remover o usuário logado.", "error")
+        return redirect(url_for("settings"))
+
+    if username == ADMIN_USERNAME:
+        flash("O usuário administrador padrão não pode ser removido.", "error")
+        return redirect(url_for("settings"))
+
+    execute_db("DELETE FROM users WHERE id = ?", (user_id,))
+    flash("Usuário removido.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("user"):
+        return redirect(url_for("landing"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        user = query_db(
+            "SELECT username, role FROM users WHERE username = ? AND password = ?",
+            (username, password),
+        )
+
+        if user:
+            session["user"] = username
+            session["role"] = user[0]["role"] or "leitor"
+            next_page = request.args.get("next") or url_for("landing")
+            flash("Login realizado com sucesso.", "success")
+            return redirect(next_page)
+
+        flash("Credenciais inválidas.", "error")
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.pop("user", None)
+    session.pop("role", None)
+    flash("Sessão encerrada.", "success")
+    return redirect(url_for("login"))
+
+
+init_db()
+start_scheduler()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(debug=True, host="0.0.0.0", port=port)
