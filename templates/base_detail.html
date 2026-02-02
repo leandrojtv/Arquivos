@@ -49,7 +49,13 @@
     </div>
     <div class="detail-tile">
       <p class="eyebrow">Última alteração</p>
-      <p class="value">{{ base.last_updated_at or '—' }}</p>
+      <p class="value">
+        {% if base.last_updated_at %}
+          {{ base.last_updated_at[:16].replace('T', ' ') }}
+        {% else %}
+          —
+        {% endif %}
+      </p>
     </div>
     <div class="detail-tile">
       <p class="eyebrow">Alterado por</p>
