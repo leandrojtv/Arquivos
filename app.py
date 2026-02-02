@@ -1713,6 +1713,65 @@ def base_id_by_name(name):
     return None
 
 
+def update_base_role(base_id, gestor_id, role, updated_by=None):
+    base_rows = query_db(
+        "SELECT gestor_id, substituto1_id, substituto2_id FROM bases WHERE id = ?",
+        (base_id,),
+    )
+    if not base_rows:
+        return False, "Base não encontrada."
+
+    base = base_rows[0]
+    current_gestor = base["gestor_id"]
+    sub1 = base["substituto1_id"]
+    sub2 = base["substituto2_id"]
+
+    if role == "titular":
+        if gestor_id in (sub1, sub2):
+            return False, "Gestor titular não pode repetir um substituto."
+        execute_db(
+            """
+            UPDATE bases
+            SET gestor_id = ?, last_updated_by = ?, last_updated_at = ?
+            WHERE id = ?
+            """,
+            (gestor_id, updated_by, datetime.utcnow().isoformat(), base_id),
+        )
+        return True, None
+
+    if role == "sub1":
+        if gestor_id == current_gestor:
+            return False, "1º substituto não pode ser o gestor titular."
+        if gestor_id == sub2:
+            return False, "Substitutos precisam ser pessoas diferentes."
+        execute_db(
+            """
+            UPDATE bases
+            SET substituto1_id = ?, last_updated_by = ?, last_updated_at = ?
+            WHERE id = ?
+            """,
+            (gestor_id, updated_by, datetime.utcnow().isoformat(), base_id),
+        )
+        return True, None
+
+    if role == "sub2":
+        if gestor_id == current_gestor:
+            return False, "2º substituto não pode ser o gestor titular."
+        if gestor_id == sub1:
+            return False, "Substitutos precisam ser pessoas diferentes."
+        execute_db(
+            """
+            UPDATE bases
+            SET substituto2_id = ?, last_updated_by = ?, last_updated_at = ?
+            WHERE id = ?
+            """,
+            (gestor_id, updated_by, datetime.utcnow().isoformat(), base_id),
+        )
+        return True, None
+
+    return False, "Papel inválido."
+
+
 @app.route("/gestores")
 @login_required
 def list_gestors():
@@ -1752,12 +1811,36 @@ def gestor_detail(gestor_id):
         """,
         (gestor_id, gestor_id, gestor_id, gestor_id, gestor_id, gestor_id),
     )
+    all_bases = query_db("SELECT id, name FROM bases ORDER BY name COLLATE NOCASE ASC")
 
     return render_template(
         "gestor_detail.html",
         gestor=gestor_rows[0],
         bases=bases,
+        all_bases=all_bases,
     )
+
+
+@app.route("/gestores/<int:gestor_id>/vincular", methods=["POST"])
+@login_required
+def link_base_to_gestor(gestor_id):
+    base_name = request.form.get("base_name", "").strip()
+    role = request.form.get("role", "titular").strip()
+    if not base_name:
+        flash("Informe o nome da base para vincular.", "error")
+        return redirect(url_for("gestor_detail", gestor_id=gestor_id))
+
+    base_id = base_id_by_name(base_name)
+    if not base_id:
+        flash("Base não encontrada.", "error")
+        return redirect(url_for("gestor_detail", gestor_id=gestor_id))
+
+    ok, message = update_base_role(base_id, gestor_id, role, session.get("user"))
+    if not ok:
+        flash(message or "Não foi possível vincular a base.", "error")
+    else:
+        flash("Base vinculada ao gestor.", "success")
+    return redirect(url_for("gestor_detail", gestor_id=gestor_id))
 
 
 @app.route("/gestores/novo")
@@ -2065,6 +2148,49 @@ def delete_base(base_id):
     return redirect(url_for("list_bases"))
 
 
+@app.route("/bases/atualizar-gestor", methods=["POST"])
+@login_required
+def bulk_update_base_gestor():
+    base_ids = request.form.getlist("base_ids")
+    gestor_raw = request.form.get("gestor_id", "")
+    gestor_id = parse_gestor_id(gestor_raw) or gestor_id_by_name(gestor_raw)
+    role = request.form.get("role", "titular").strip()
+    query_params = {
+        "q": request.form.get("q", ""),
+        "gestor": request.form.get("gestor", ""),
+        "base": request.form.get("base", ""),
+        "ambiente": request.form.get("ambiente", ""),
+        "fonte": request.form.get("fonte", ""),
+        "descricao": request.form.get("descricao", ""),
+        "tipo": "bases",
+    }
+    if not base_ids:
+        flash("Selecione ao menos uma base para atualizar.", "error")
+        return redirect(url_for("search", **query_params))
+    if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
+        return redirect(url_for("search", **query_params))
+
+    updated = 0
+    errors = []
+    for base_id_raw in base_ids:
+        try:
+            base_id = int(base_id_raw)
+        except ValueError:
+            continue
+        ok, message = update_base_role(base_id, gestor_id, role, session.get("user"))
+        if not ok and message:
+            errors.append(message)
+        elif ok:
+            updated += 1
+
+    if updated:
+        flash(f"Gestor atualizado em {updated} base(s).", "success")
+    if errors:
+        flash("Algumas bases não puderam ser atualizadas: " + "; ".join(errors), "warning")
+
+    return redirect(url_for("search", **query_params))
+
+
 @app.route("/buscar")
 @login_required
 def search():
@@ -2088,6 +2214,9 @@ def search():
     gestores = query_db(
         "SELECT DISTINCT name FROM gestors WHERE name IS NOT NULL AND name != '' ORDER BY name"
     )
+    gestores_with_id = query_db(
+        "SELECT id, name FROM gestors WHERE name IS NOT NULL AND name != '' ORDER BY name"
+    )
 
     return render_template(
         "search.html",
@@ -2105,6 +2234,7 @@ def search():
             "ambientes": [row["ambiente"] for row in ambientes],
             "fontes": [row["source_connector"] for row in fontes],
             "gestores": [row["name"] for row in gestores],
+            "gestores_com_id": gestores_with_id,
         },
     )
 

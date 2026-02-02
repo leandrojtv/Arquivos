@@ -471,6 +471,32 @@ button:hover,
   gap: 0.35rem;
 }
 
+.bulk-update-card {
+  margin-bottom: 1rem;
+}
+
+.bulk-update-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.table-actions .inline-form select {
+  min-width: 160px;
+}
+
+.table-actions .inline-form .wide-input {
+  min-width: 220px;
+}
+
+@media (max-width: 640px) {
+  .bulk-update-header {
+    align-items: flex-start;
+  }
+}
 .stacked {
   display: flex;
   flex-direction: column;

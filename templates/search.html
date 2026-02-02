@@ -102,9 +102,49 @@
           </div>
         </div>
         {% if results %}
+          <form action="{{ url_for('bulk_update_base_gestor') }}" method="post" class="card inset bulk-update-card" id="bulk-update-form">
+            <div class="bulk-update-header">
+              <div>
+                <p class="eyebrow">Alteração em lote</p>
+                <h3>Atualizar gestor das bases selecionadas</h3>
+                <p class="subtitle">Escolha o papel e informe o gestor para aplicar em uma ou mais bases.</p>
+              </div>
+              <button type="submit" class="button"><svg class="icon"><use href="#icon-check"></use></svg><span>Aplicar</span></button>
+            </div>
+            <div class="grid-two">
+              <div>
+                <label for="bulk_gestor_id">Gestor</label>
+                <input type="text" id="bulk_gestor_id" name="gestor_id" list="gestor-opcoes-bulk" placeholder="Digite o nome do gestor" />
+                <datalist id="gestor-opcoes-bulk">
+                  {% for gestor in options.gestores_com_id %}
+                    <option value="{{ gestor['id'] }} {{ gestor['name'] }}"></option>
+                  {% endfor %}
+                </datalist>
+                <p class="helper">Use o mesmo gestor para todas as bases selecionadas.</p>
+              </div>
+              <div>
+                <label for="bulk_role">Papel do gestor</label>
+                <select id="bulk_role" name="role">
+                  <option value="titular">Titular</option>
+                  <option value="sub1">1º substituto</option>
+                  <option value="sub2">2º substituto</option>
+                </select>
+              </div>
+            </div>
+            <input type="hidden" name="q" value="{{ query }}" />
+            <input type="hidden" name="gestor" value="{{ filters.gestor }}" />
+            <input type="hidden" name="base" value="{{ filters.base }}" />
+            <input type="hidden" name="ambiente" value="{{ filters.ambiente }}" />
+            <input type="hidden" name="fonte" value="{{ filters.fonte }}" />
+            <input type="hidden" name="descricao" value="{{ filters.descricao }}" />
+          </form>
+
           <table>
             <thead>
               <tr>
+                <th class="center">
+                  <input type="checkbox" id="select-all-bases" />
+                </th>
                 <th>Base</th>
                 <th>Ambiente</th>
                 <th>Gestor</th>
@@ -114,6 +154,9 @@
             <tbody>
               {% for base in results %}
                 <tr>
+                  <td class="center">
+                    <input type="checkbox" name="base_ids" value="{{ base['id'] }}" form="bulk-update-form" />
+                  </td>
                   <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base["name"] }}</a></td>
                   <td>{{ base["ambiente"] or '—' }}</td>
                   <td>
@@ -138,4 +181,15 @@
     </div>
   </div>
 </section>
+<script>
+  const selectAllBases = document.getElementById('select-all-bases');
+  if (selectAllBases) {
+    selectAllBases.addEventListener('change', (event) => {
+      const checked = event.target.checked;
+      document.querySelectorAll('input[name="base_ids"]').forEach((input) => {
+        input.checked = checked;
+      });
+    });
+  }
+</script>
 {% endblock %}

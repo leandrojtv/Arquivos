@@ -35,6 +35,22 @@
         <p class="eyebrow">Bases relacionadas</p>
         <h3>{{ bases|length }} base(s) encontradas</h3>
       </div>
+      <div class="table-actions">
+        <form action="{{ url_for('link_base_to_gestor', gestor_id=gestor.id) }}" method="post" class="inline-form stacked sm-row">
+          <input type="text" name="base_name" placeholder="Adicionar base" list="base-opcoes" class="wide-input" />
+          <datalist id="base-opcoes">
+            {% for base in all_bases %}
+              <option value="{{ base['name'] }}"></option>
+            {% endfor %}
+          </datalist>
+          <select name="role">
+            <option value="titular">Titular</option>
+            <option value="sub1">1º substituto</option>
+            <option value="sub2">2º substituto</option>
+          </select>
+          <button type="submit" class="button secondary compact"><svg class="icon"><use href="#icon-plus"></use></svg><span>Vincular</span></button>
+        </form>
+      </div>
     </div>
     <table>
       <thead>
