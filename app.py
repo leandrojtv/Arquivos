@@ -2172,6 +2172,7 @@ def bulk_update_base_gestor():
     gestor_raw = request.form.get("gestor_id", "")
     gestor_id = parse_gestor_id(gestor_raw) or gestor_id_by_name(gestor_raw)
     role = request.form.get("role", "titular").strip()
+    return_to = request.form.get("return_to", "").strip()
     query_params = {
         "q": request.form.get("q", ""),
         "gestor": request.form.get("gestor", ""),
@@ -2181,11 +2182,15 @@ def bulk_update_base_gestor():
         "descricao": request.form.get("descricao", ""),
         "tipo": "bases",
     }
+    if return_to == "bases":
+        redirect_target = url_for("list_bases", q=query_params["q"])
+    else:
+        redirect_target = url_for("search", **query_params)
     if not base_ids:
         flash("Selecione ao menos uma base para atualizar.", "error")
-        return redirect(url_for("search", **query_params))
+        return redirect(redirect_target)
     if not (gestor_id and ensure_gestor_exists(gestor_id, "Gestor")):
-        return redirect(url_for("search", **query_params))
+        return redirect(redirect_target)
 
     updated = 0
     errors = []
@@ -2205,7 +2210,7 @@ def bulk_update_base_gestor():
     if errors:
         flash("Algumas bases não puderam ser atualizadas: " + "; ".join(errors), "warning")
 
-    return redirect(url_for("search", **query_params))
+    return redirect(redirect_target)
 
 
 @app.route("/buscar")

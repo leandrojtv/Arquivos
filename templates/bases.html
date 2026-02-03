@@ -47,30 +47,28 @@
       </div>
     </div>
     <input type="hidden" name="q" value="{{ query }}" />
-  </form>
-  {% endif %}
-  <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th class="center">
-            <input type="checkbox" id="select-all-bases" />
-          </th>
-          <th>Nome</th>
-          <th>Ambiente</th>
-          <th>Descrição</th>
-          <th>Gestor</th>
-          <th>1º Substituto</th>
-          <th>2º Substituto</th>
-          <th class="center">Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if bases %}
+    <input type="hidden" name="return_to" value="bases" />
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th class="center">
+              <input type="checkbox" id="select-all-bases" />
+            </th>
+            <th>Nome</th>
+            <th>Ambiente</th>
+            <th>Descrição</th>
+            <th>Gestor</th>
+            <th>1º Substituto</th>
+            <th>2º Substituto</th>
+            <th class="center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
           {% for base in bases %}
             <tr>
               <td class="center">
-                <input type="checkbox" name="base_ids" value="{{ base['id'] }}" form="bulk-update-bases" />
+                <input type="checkbox" name="base_ids" value="{{ base['id'] }}" />
               </td>
               <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base['name'] }}</a></td>
               <td>{{ base['ambiente'] or '—' }}</td>
@@ -86,12 +84,30 @@
               </td>
             </tr>
           {% endfor %}
-        {% else %}
-          <tr><td colspan="8" class="center">Nenhuma base cadastrada.</td></tr>
-        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+  {% else %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Ambiente</th>
+          <th>Descrição</th>
+          <th>Gestor</th>
+          <th>1º Substituto</th>
+          <th>2º Substituto</th>
+          <th class="center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="7" class="center">Nenhuma base cadastrada.</td></tr>
       </tbody>
     </table>
   </div>
+  {% endif %}
 </section>
 <script>
   const selectAllBases = document.getElementById('select-all-bases');

@@ -137,45 +137,45 @@
             <input type="hidden" name="ambiente" value="{{ filters.ambiente }}" />
             <input type="hidden" name="fonte" value="{{ filters.fonte }}" />
             <input type="hidden" name="descricao" value="{{ filters.descricao }}" />
-          </form>
 
-          <table>
-            <thead>
-              <tr>
-                <th class="center">
-                  <input type="checkbox" id="select-all-bases" />
-                </th>
-                <th>Base</th>
-                <th>Ambiente</th>
-                <th>Gestor</th>
-                <th class="actions">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for base in results %}
+            <table>
+              <thead>
                 <tr>
-                  <td class="center">
-                    <input type="checkbox" name="base_ids" value="{{ base['id'] }}" form="bulk-update-form" />
-                  </td>
-                  <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base["name"] }}</a></td>
-                  <td>{{ base["ambiente"] or '—' }}</td>
-                  <td>
-                    {% if base['gestor_id'] %}
-                    <a class="link" href="{{ url_for('gestor_detail', gestor_id=base['gestor_id']) }}">{{ base["gestor_name"] }}</a>
-                    {% else %}
-                    —
-                    {% endif %}
-                  </td>
-                  <td class="actions">
-                    <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
-                    <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
-                      <button type="submit" class="button ghost danger compact"><svg class="icon"><use href="#icon-trash"></use></svg><span>Excluir</span></button>
-                    </form>
-                  </td>
+                  <th class="center">
+                    <input type="checkbox" id="select-all-bases" />
+                  </th>
+                  <th>Base</th>
+                  <th>Ambiente</th>
+                  <th>Gestor</th>
+                  <th class="actions">Ações</th>
                 </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {% for base in results %}
+                  <tr>
+                    <td class="center">
+                      <input type="checkbox" name="base_ids" value="{{ base['id'] }}" />
+                    </td>
+                    <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base["name"] }}</a></td>
+                    <td>{{ base["ambiente"] or '—' }}</td>
+                    <td>
+                      {% if base['gestor_id'] %}
+                      <a class="link" href="{{ url_for('gestor_detail', gestor_id=base['gestor_id']) }}">{{ base["gestor_name"] }}</a>
+                      {% else %}
+                      —
+                      {% endif %}
+                    </td>
+                    <td class="actions">
+                      <a class="button secondary compact" href="{{ url_for('edit_base', base_id=base['id']) }}"><svg class="icon"><use href="#icon-edit"></use></svg><span>Editar</span></a>
+                      <form action="{{ url_for('delete_base', base_id=base['id']) }}" method="post" onsubmit="return confirm('Deseja excluir esta base?');">
+                        <button type="submit" class="button ghost danger compact"><svg class="icon"><use href="#icon-trash"></use></svg><span>Excluir</span></button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </form>
         {% endif %}
       </section>
     </div>
