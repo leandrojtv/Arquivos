@@ -17,10 +17,45 @@
       <span>Buscar</span>
     </button>
   </form>
+  {% if bases %}
+  <form action="{{ url_for('bulk_update_base_gestor') }}" method="post" class="card inset bulk-update-card" id="bulk-update-bases">
+    <div class="bulk-update-header">
+      <div>
+        <p class="eyebrow">Alteração em lote</p>
+        <h3>Atualizar gestor das bases selecionadas</h3>
+        <p class="subtitle">Defina o gestor e o papel para aplicar nas bases listadas.</p>
+      </div>
+      <button type="submit" class="button"><svg class="icon"><use href="#icon-check"></use></svg><span>Aplicar</span></button>
+    </div>
+    <div class="grid-two">
+      <div>
+        <label for="bulk_gestor_bases">Gestor</label>
+        <input type="text" id="bulk_gestor_bases" name="gestor_id" list="gestor-opcoes-bases" placeholder="Digite o nome do gestor" />
+        <datalist id="gestor-opcoes-bases">
+          {% for gestor in gestores_with_id %}
+            <option value="{{ gestor['id'] }} {{ gestor['name'] }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+      <div>
+        <label for="bulk_role_bases">Papel do gestor</label>
+        <select id="bulk_role_bases" name="role">
+          <option value="titular">Titular</option>
+          <option value="sub1">1º substituto</option>
+          <option value="sub2">2º substituto</option>
+        </select>
+      </div>
+    </div>
+    <input type="hidden" name="q" value="{{ query }}" />
+  </form>
+  {% endif %}
   <div class="table-wrapper">
     <table>
       <thead>
         <tr>
+          <th class="center">
+            <input type="checkbox" id="select-all-bases" />
+          </th>
           <th>Nome</th>
           <th>Ambiente</th>
           <th>Descrição</th>
@@ -34,6 +69,9 @@
         {% if bases %}
           {% for base in bases %}
             <tr>
+              <td class="center">
+                <input type="checkbox" name="base_ids" value="{{ base['id'] }}" form="bulk-update-bases" />
+              </td>
               <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base['name'] }}</a></td>
               <td>{{ base['ambiente'] or '—' }}</td>
               <td>{{ base['descricao'] or '—' }}</td>
@@ -49,10 +87,21 @@
             </tr>
           {% endfor %}
         {% else %}
-          <tr><td colspan="7" class="center">Nenhuma base cadastrada.</td></tr>
+          <tr><td colspan="8" class="center">Nenhuma base cadastrada.</td></tr>
         {% endif %}
       </tbody>
     </table>
   </div>
 </section>
+<script>
+  const selectAllBases = document.getElementById('select-all-bases');
+  if (selectAllBases) {
+    selectAllBases.addEventListener('change', (event) => {
+      const checked = event.target.checked;
+      document.querySelectorAll('input[name="base_ids"]').forEach((input) => {
+        input.checked = checked;
+      });
+    });
+  }
+</script>
 {% endblock %}

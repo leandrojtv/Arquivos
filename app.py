@@ -1824,22 +1824,38 @@ def gestor_detail(gestor_id):
 @app.route("/gestores/<int:gestor_id>/vincular", methods=["POST"])
 @login_required
 def link_base_to_gestor(gestor_id):
+    base_ids = request.form.getlist("base_ids")
     base_name = request.form.get("base_name", "").strip()
     role = request.form.get("role", "titular").strip()
-    if not base_name:
-        flash("Informe o nome da base para vincular.", "error")
+
+    resolved_ids = []
+    for raw_id in base_ids:
+        try:
+            resolved_ids.append(int(raw_id))
+        except ValueError:
+            continue
+    if base_name:
+        base_id = base_id_by_name(base_name)
+        if base_id:
+            resolved_ids.append(base_id)
+
+    if not resolved_ids:
+        flash("Selecione ao menos uma base para vincular.", "error")
         return redirect(url_for("gestor_detail", gestor_id=gestor_id))
 
-    base_id = base_id_by_name(base_name)
-    if not base_id:
-        flash("Base não encontrada.", "error")
-        return redirect(url_for("gestor_detail", gestor_id=gestor_id))
+    updated = 0
+    errors = []
+    for base_id in resolved_ids:
+        ok, message = update_base_role(base_id, gestor_id, role, session.get("user"))
+        if not ok and message:
+            errors.append(message)
+        elif ok:
+            updated += 1
 
-    ok, message = update_base_role(base_id, gestor_id, role, session.get("user"))
-    if not ok:
-        flash(message or "Não foi possível vincular a base.", "error")
-    else:
-        flash("Base vinculada ao gestor.", "success")
+    if updated:
+        flash(f"Base(s) vinculada(s) ao gestor: {updated}.", "success")
+    if errors:
+        flash("Algumas bases não puderam ser vinculadas: " + "; ".join(errors), "warning")
     return redirect(url_for("gestor_detail", gestor_id=gestor_id))
 
 
@@ -1950,7 +1966,8 @@ def ensure_gestor_exists(gestor_id, field_label):
 def list_bases():
     query = request.args.get("q", "").strip()
     records = get_filtered_bases(query, "", "", "", "", "")
-    return render_template("bases.html", bases=records, query=query)
+    gestores_with_id = query_db("SELECT id, name FROM gestors ORDER BY name COLLATE NOCASE ASC")
+    return render_template("bases.html", bases=records, query=query, gestores_with_id=gestores_with_id)
 
 
 @app.route("/bases/<int:base_id>")

@@ -492,6 +492,10 @@ button:hover,
   min-width: 220px;
 }
 
+.table-actions .inline-form select[multiple] {
+  min-width: 240px;
+}
+
 @media (max-width: 640px) {
   .bulk-update-header {
     align-items: flex-start;
