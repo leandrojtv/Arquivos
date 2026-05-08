@@ -567,12 +567,18 @@ def bulk_upsert_bases(records, updated_by=None):
     for rec in records:
         if len(rec) == 6:
             name, ambiente, descricao, gestor_id, sub1_id, sub2_id = rec
+            secretaria, coordenacao = None, None
+            source_connector, source_job_id = "import", None
+        elif len(rec) == 8:
+            name, ambiente, descricao, secretaria, coordenacao, gestor_id, sub1_id, sub2_id = rec
             source_connector, source_job_id = "import", None
         elif len(rec) == 7:
             name, ambiente, descricao, gestor_id, sub1_id, sub2_id, source_job_id = rec
+            secretaria, coordenacao = None, None
             source_connector = None
         else:
             name, ambiente, descricao, gestor_id, sub1_id, sub2_id, source_connector, source_job_id = rec
+            secretaria, coordenacao = None, None
 
         existing = cur.execute(
             "SELECT id FROM bases WHERE name = ? COLLATE NOCASE", (name,)
@@ -583,31 +589,33 @@ def bulk_upsert_bases(records, updated_by=None):
                 cur.execute(
                     """
                     UPDATE bases
-                    SET ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?,
+                    SET ambiente = ?, descricao = ?, secretaria = ?, coordenacao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?,
                         last_updated_by = ?, last_updated_at = ?
                     WHERE id = ?
                     """,
-                    (ambiente, descricao, gestor_id, sub1_id, sub2_id, updated_by, updated_at, existing[0]),
+                    (ambiente, descricao, secretaria, coordenacao, gestor_id, sub1_id, sub2_id, updated_by, updated_at, existing[0]),
                 )
             else:
                 cur.execute(
-                    "UPDATE bases SET ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ? WHERE id = ?",
-                    (ambiente, descricao, gestor_id, sub1_id, sub2_id, existing[0]),
+                    "UPDATE bases SET ambiente = ?, descricao = ?, secretaria = ?, coordenacao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ? WHERE id = ?",
+                    (ambiente, descricao, secretaria, coordenacao, gestor_id, sub1_id, sub2_id, existing[0]),
                 )
         else:
             if updated_by:
                 cur.execute(
                     """
                     INSERT INTO bases (
-                        name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id,
+                        name, ambiente, descricao, secretaria, coordenacao, gestor_id, substituto1_id, substituto2_id,
                         source_connector, source_job_id, last_updated_by, last_updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         name,
                         ambiente,
                         descricao,
+                        secretaria,
+                        coordenacao,
                         gestor_id,
                         sub1_id,
                         sub2_id,
@@ -620,13 +628,15 @@ def bulk_upsert_bases(records, updated_by=None):
             else:
                 cur.execute(
                     """
-                    INSERT INTO bases (name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO bases (name, ambiente, descricao, secretaria, coordenacao, gestor_id, substituto1_id, substituto2_id, source_connector, source_job_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         name,
                         ambiente,
                         descricao,
+                        secretaria,
+                        coordenacao,
                         gestor_id,
                         sub1_id,
                         sub2_id,
@@ -1656,9 +1666,16 @@ def reports():
     )
     coord_rows = query_db(
         """
-        SELECT COALESCE(g.coordenacao, 'Sem coordenação') as label, COUNT(*) as total
-        FROM bases b
-        LEFT JOIN gestors g ON g.id = b.gestor_id
+        SELECT COALESCE(NULLIF(TRIM(coordenacao), ''), 'Sem coordenação') as label, COUNT(*) as total
+        FROM bases
+        GROUP BY label
+        ORDER BY total DESC, label ASC
+        """
+    )
+    sec_rows = query_db(
+        """
+        SELECT COALESCE(NULLIF(TRIM(secretaria), ''), 'Sem secretaria') as label, COUNT(*) as total
+        FROM bases
         GROUP BY label
         ORDER BY total DESC, label ASC
         """
@@ -1679,6 +1696,8 @@ def reports():
         "coverage_values": [row["total"] for row in coverage_rows],
         "coord_labels": [row["label"] or "Sem coordenação" for row in coord_rows],
         "coord_values": [row["total"] for row in coord_rows],
+        "sec_labels": [row["label"] or "Sem secretaria" for row in sec_rows],
+        "sec_values": [row["total"] for row in sec_rows],
         "env_labels": [row["label"] or "Sem ambiente" for row in env_rows],
         "env_values": [row["total"] for row in env_rows],
     }
@@ -2148,9 +2167,9 @@ def get_filtered_bases(term, gestor, base_nome, ambiente, fonte, descricao):
     if term:
         like_term = normalize_wildcard(term)
         conditions.append(
-            "(b.name LIKE ? ESCAPE '\\' OR COALESCE(b.descricao, '') LIKE ? ESCAPE '\\' OR COALESCE(b.ambiente, '') LIKE ? ESCAPE '\\' OR COALESCE(g.name, '') LIKE ? ESCAPE '\\')"
+            "(b.name LIKE ? ESCAPE '\\' OR COALESCE(b.descricao, '') LIKE ? ESCAPE '\\' OR COALESCE(b.ambiente, '') LIKE ? ESCAPE '\\' OR COALESCE(b.secretaria, '') LIKE ? ESCAPE '\\' OR COALESCE(b.coordenacao, '') LIKE ? ESCAPE '\\' OR COALESCE(g.name, '') LIKE ? ESCAPE '\\')"
         )
-        params.extend([like_term, like_term, like_term, like_term])
+        params.extend([like_term, like_term, like_term, like_term, like_term, like_term])
     if gestor:
         conditions.append("g.name LIKE ? ESCAPE '\\'")
         params.append(normalize_wildcard(gestor))
@@ -2571,6 +2590,8 @@ def import_bases_flow():
             "name": request.form.get("map_name"),
             "ambiente": request.form.get("map_ambiente"),
             "descricao": request.form.get("map_descricao"),
+            "secretaria": request.form.get("map_secretaria"),
+            "coordenacao": request.form.get("map_coordenacao"),
             "gestor": request.form.get("map_gestor"),
             "sub1": request.form.get("map_sub1"),
             "sub2": request.form.get("map_sub2"),
@@ -2603,6 +2624,8 @@ def import_bases_flow():
             optional_cols = [
                 mapping.get("ambiente"),
                 mapping.get("descricao"),
+                mapping.get("secretaria"),
+                mapping.get("coordenacao"),
                 mapping.get("sub1"),
                 mapping.get("sub2"),
             ]
@@ -2614,6 +2637,8 @@ def import_bases_flow():
             name = row.get(mapping["name"], "").strip()
             ambiente = row.get(mapping["ambiente"], "").strip() if mapping.get("ambiente") else ""
             descricao = row.get(mapping["descricao"], "").strip() if mapping.get("descricao") else ""
+            secretaria = row.get(mapping["secretaria"], "").strip() if mapping.get("secretaria") else ""
+            coordenacao = row.get(mapping["coordenacao"], "").strip() if mapping.get("coordenacao") else ""
             gestor_name = row.get(mapping["gestor"], "").strip()
             sub1_name = row.get(mapping.get("sub1"), "").strip() if mapping.get("sub1") else ""
             sub2_name = row.get(mapping.get("sub2"), "").strip() if mapping.get("sub2") else ""
@@ -2649,7 +2674,7 @@ def import_bases_flow():
                 errors.append("Gestor titular não pode repetir um substituto.")
                 continue
 
-            prepared.append((name, ambiente or None, descricao or None, gestor_id, sub1_id, sub2_id))
+            prepared.append((name, ambiente or None, descricao or None, secretaria or None, coordenacao or None, gestor_id, sub1_id, sub2_id))
 
         if prepared:
             bulk_upsert_bases(prepared, session.get("user"))
@@ -2683,6 +2708,8 @@ def import_bases_flow():
                     "name": row.get(mapping.get("name"), ""),
                     "ambiente": row.get(mapping.get("ambiente"), "") if mapping.get("ambiente") else "",
                     "descricao": row.get(mapping.get("descricao"), "") if mapping.get("descricao") else "",
+                    "secretaria": row.get(mapping.get("secretaria"), "") if mapping.get("secretaria") else "",
+                    "coordenacao": row.get(mapping.get("coordenacao"), "") if mapping.get("coordenacao") else "",
                     "gestor": row.get(mapping.get("gestor"), ""),
                     "sub1": row.get(mapping.get("sub1"), ""),
                     "sub2": row.get(mapping.get("sub2"), ""),

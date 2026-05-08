@@ -146,7 +146,9 @@
                   </th>
                   <th>Base</th>
                   <th>Ambiente</th>
-                  <th>Gestor</th>
+                <th>Secretaria</th>
+                <th>Coordenação</th>
+                <th>Gestor</th>
                   <th class="actions">Ações</th>
                 </tr>
               </thead>
@@ -158,6 +160,8 @@
                     </td>
                     <td><a class="link" href="{{ url_for('base_detail', base_id=base['id']) }}">{{ base["name"] }}</a></td>
                     <td>{{ base["ambiente"] or '—' }}</td>
+                    <td>{{ base["secretaria"] or '—' }}</td>
+                    <td>{{ base["coordenacao"] or '—' }}</td>
                     <td>
                       {% if base['gestor_id'] %}
                       <a class="link" href="{{ url_for('gestor_detail', gestor_id=base['gestor_id']) }}">{{ base["gestor_name"] }}</a>

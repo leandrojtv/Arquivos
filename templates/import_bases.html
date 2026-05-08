@@ -38,7 +38,7 @@
     <div class="wizard-step">3. Importação</div>
   </div>
   <form action="{{ url_for('import_bases_flow', step='mapear') }}" method="post" class="card">
-    <p class="form-helper">Escolha de qual coluna do arquivo virá cada informação da base. Titular é obrigatório; ambiente e descrição são opcionais.</p>
+    <p class="form-helper">Escolha de qual coluna do arquivo virá cada informação da base. Titular é obrigatório; ambiente, descrição, secretaria e coordenação são opcionais.</p>
     <div class="grid-two">
       <div>
         <label for="map_name">Nome da base</label>
@@ -57,6 +57,20 @@
       <div>
         <label for="map_descricao">Descrição</label>
         <select name="map_descricao" id="map_descricao">
+          <option value="">Ignorar (opcional)</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_secretaria">Secretaria</label>
+        <select name="map_secretaria" id="map_secretaria">
+          <option value="">Ignorar (opcional)</option>
+          {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="map_coordenacao">Coordenação</label>
+        <select name="map_coordenacao" id="map_coordenacao">
           <option value="">Ignorar (opcional)</option>
           {% for col in headers %}<option value="{{ col }}">{{ col }}</option>{% endfor %}
         </select>
@@ -117,6 +131,8 @@
             <th>Base</th>
             <th>Ambiente</th>
             <th>Descrição</th>
+            <th>Secretaria</th>
+            <th>Coordenação</th>
             <th>Gestor</th>
             <th>1º Substituto</th>
             <th>2º Substituto</th>
@@ -128,6 +144,8 @@
             <td>{{ row.name }}</td>
             <td>{{ row.ambiente or '—' }}</td>
             <td>{{ row.descricao or '—' }}</td>
+            <td>{{ row.secretaria or '—' }}</td>
+            <td>{{ row.coordenacao or '—' }}</td>
             <td>{{ row.gestor }}</td>
             <td>{{ row.sub1 or '—' }}</td>
             <td>{{ row.sub2 or '—' }}</td>

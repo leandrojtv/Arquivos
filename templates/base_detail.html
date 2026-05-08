@@ -24,6 +24,14 @@
       <p class="value">{{ base.source_connector|capitalize }}</p>
     </div>
     <div class="detail-tile">
+      <p class="eyebrow">Secretaria</p>
+      <p class="value">{{ base.secretaria or 'Não informada' }}</p>
+    </div>
+    <div class="detail-tile">
+      <p class="eyebrow">Coordenação</p>
+      <p class="value">{{ base.coordenacao or 'Não informada' }}</p>
+    </div>
+    <div class="detail-tile">
       <p class="eyebrow">Gestor titular</p>
       <p class="value">
         {% if base.gestor_id %}

@@ -6,7 +6,7 @@
   <div class="section-heading">
     <div>
       <h2>Visão consolidada das bases</h2>
-      <p class="muted">Acompanhe cobertura de gestores, distribuição por coordenação e ambientes em tempo real.</p>
+      <p class="muted">Acompanhe cobertura por gestor e a distribuição de secretaria/coordenação cadastradas na base.</p>
     </div>
     <div class="stat-actions">
       <div class="stat-chips">
@@ -55,8 +55,8 @@
   <div class="card chart-card draggable-card" data-card-id="coord" draggable="true" aria-grabbed="false">
     <div class="card-header">
       <div>
-        <p class="eyebrow">Panorama</p>
-        <h3>Bases por coordenação</h3>
+        <p class="eyebrow">Organização da base</p>
+        <h3>Bases por coordenação (do database)</h3>
       </div>
       <div class="card-actions">
         <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
@@ -66,6 +66,23 @@
     </div>
     <div class="chart-wrapper">
       <canvas id="coordChart" aria-label="Gráfico de bases por coordenação"></canvas>
+    </div>
+  </div>
+
+  <div class="card chart-card draggable-card" data-card-id="sec" draggable="true" aria-grabbed="false">
+    <div class="card-header">
+      <div>
+        <p class="eyebrow">Organização da base</p>
+        <h3>Bases por secretaria (do database)</h3>
+      </div>
+      <div class="card-actions">
+        <button type="button" class="ghost drag-handle" aria-label="Arraste para reposicionar" title="Arraste para reposicionar">
+          ⇅
+        </button>
+      </div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="secChart" aria-label="Gráfico de bases por secretaria"></canvas>
     </div>
   </div>
 
@@ -95,6 +112,8 @@
   const coordValues = {{ coord_values|tojson }};
   const envLabels = {{ env_labels|tojson }};
   const envValues = {{ env_values|tojson }};
+  const secLabels = {{ sec_labels|tojson }};
+  const secValues = {{ sec_values|tojson }};
 
   const palette = ["#0f6fed", "#7cc4ff", "#36a3f7", "#9dd5ff", "#1d9bf0", "#74a9f2", "#b7d8ff", "#5090ea"];
   const envPalette = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#a855f7", "#06b6d4", "#f97316", "#14b8a6", "#6366f1", "#84cc16"];
@@ -281,6 +300,28 @@
         },
       },
       cutout: "55%",
+    },
+  });
+
+  renderChart("secChart", {
+    type: "bar",
+    data: {
+      labels: secLabels,
+      datasets: [
+        {
+          label: "Bases",
+          data: secValues,
+          backgroundColor: secLabels.map((_, idx) => palette[idx % palette.length]),
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, precision: 0 },
+      },
+      plugins: { legend: { display: false } },
     },
   });
 
