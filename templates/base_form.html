@@ -27,6 +27,14 @@
       <textarea name="descricao" rows="3" placeholder="Descreva a base (opcional)">{{ base['descricao'] or '' if base else '' }}</textarea>
     </label>
     <div class="grid two">
+      <label>Secretaria
+        <input type="text" name="secretaria" value="{{ base['secretaria'] if base else '' }}" placeholder="Secretaria (opcional)" />
+      </label>
+      <label>Coordenação
+        <input type="text" name="coordenacao" value="{{ base['coordenacao'] if base else '' }}" placeholder="Coordenação (opcional)" />
+      </label>
+    </div>
+    <div class="grid two">
       <div class="picker-field">
         <div class="picker-label">
           <span>Gestor titular</span>

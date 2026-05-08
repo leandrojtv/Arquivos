@@ -205,6 +205,8 @@ def init_db():
             name TEXT NOT NULL,
             ambiente TEXT,
             descricao TEXT,
+            secretaria TEXT,
+            coordenacao TEXT,
             gestor_id INTEGER NOT NULL,
             substituto1_id INTEGER,
             substituto2_id INTEGER,
@@ -248,6 +250,7 @@ def init_db():
     migrate_base_sizes()
     migrate_base_resource_links()
     migrate_base_audit()
+    migrate_base_org_fields()
     migrate_user_roles()
     migrate_extraction_resources()
     migrate_extraction_jobs()
@@ -350,6 +353,18 @@ def migrate_base_audit():
         conn.execute("ALTER TABLE bases ADD COLUMN last_updated_by TEXT")
     if "last_updated_at" not in names:
         conn.execute("ALTER TABLE bases ADD COLUMN last_updated_at TEXT")
+    conn.commit()
+    conn.close()
+
+
+def migrate_base_org_fields():
+    conn = sqlite3.connect(DB_PATH)
+    columns = conn.execute("PRAGMA table_info(bases)").fetchall()
+    names = {col[1] for col in columns}
+    if "secretaria" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN secretaria TEXT")
+    if "coordenacao" not in names:
+        conn.execute("ALTER TABLE bases ADD COLUMN coordenacao TEXT")
     conn.commit()
     conn.close()
 
@@ -2007,6 +2022,8 @@ def add_base():
     name = request.form.get("name", "").strip()
     ambiente = request.form.get("ambiente", "").strip()
     descricao = request.form.get("descricao", "").strip()
+    secretaria = request.form.get("secretaria", "").strip()
+    coordenacao = request.form.get("coordenacao", "").strip()
     gestor_id = parse_gestor_id(request.form.get("gestor_id", ""))
     sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
     sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
@@ -2033,15 +2050,17 @@ def add_base():
     execute_db(
         """
         INSERT INTO bases (
-            name, ambiente, descricao, gestor_id, substituto1_id, substituto2_id,
+            name, ambiente, descricao, secretaria, coordenacao, gestor_id, substituto1_id, substituto2_id,
             source_connector, last_updated_by, last_updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
             ambiente or None,
             descricao or None,
+            secretaria or None,
+            coordenacao or None,
             gestor_id,
             sub1_id,
             sub2_id,
@@ -2072,6 +2091,8 @@ def update_base(base_id):
     name = request.form.get("name", "").strip()
     ambiente = request.form.get("ambiente", "").strip()
     descricao = request.form.get("descricao", "").strip()
+    secretaria = request.form.get("secretaria", "").strip()
+    coordenacao = request.form.get("coordenacao", "").strip()
     gestor_id = parse_gestor_id(request.form.get("gestor_id", ""))
     sub1_id = parse_gestor_id(request.form.get("substituto1_id", ""))
     sub2_id = parse_gestor_id(request.form.get("substituto2_id", ""))
@@ -2098,7 +2119,7 @@ def update_base(base_id):
     execute_db(
         """
         UPDATE bases
-        SET name = ?, ambiente = ?, descricao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?,
+        SET name = ?, ambiente = ?, descricao = ?, secretaria = ?, coordenacao = ?, gestor_id = ?, substituto1_id = ?, substituto2_id = ?,
             last_updated_by = ?, last_updated_at = ?
         WHERE id = ?
         """,
@@ -2106,6 +2127,8 @@ def update_base(base_id):
             name,
             ambiente or None,
             descricao or None,
+            secretaria or None,
+            coordenacao or None,
             gestor_id,
             sub1_id,
             sub2_id,
@@ -2303,6 +2326,8 @@ def export_bases_search():
         "Base",
         "Ambiente",
         "Descrição",
+        "Secretaria",
+        "Coordenação",
         "Gestor titular",
         "1º substituto",
         "2º substituto",
@@ -2314,6 +2339,8 @@ def export_bases_search():
                 base["name"],
                 base["ambiente"] or "",
                 base["descricao"] or "",
+                base["secretaria"] or "",
+                base["coordenacao"] or "",
                 base["gestor_name"] or "",
                 base["sub1_name"] or "",
                 base["sub2_name"] or "",
